@@ -176,7 +176,7 @@ def catalog():
             cover=publisher_cover(enriched['url'])
             if cover:
                 enriched['cover_url']=cover
-                enriched['cover_verified']=True
+                enriched['cover_verified']=False
         merged.append(enriched)
     # If upstream hasn't been fetched yet or is inaccessible, show only verified curated records.
     return jsonify(count=len(merged),source_count=len(state['items']),additional_count=sum(1 for item in merged if item['id'].lower() not in {r['id'].lower() for r in state['items']}),enriched_count=enriched_count,updated_at=state['updated_at'],warning=state['error'],items=merged)
