@@ -76,10 +76,17 @@ def publisher_cover(page_url):
         response=requests.get(page_url,timeout=7,headers={'User-Agent':'Mozilla/5.0 LivroSemFronteiras/1.0'})
         response.raise_for_status()
         soup=BeautifulSoup(response.text,'html.parser')
-        tag=soup.find('meta',attrs={'property':'og:image'}) or soup.find('meta',attrs={'name':'twitter:image'})
-        candidate=(tag.get('content','') if tag else '').strip()
-        if candidate.startswith('https://') and urlparse(candidate).hostname:
-            value=candidate
+        tags=[soup.find('meta',attrs={'property':'og:image'}),soup.find('meta',attrs={'name':'twitter:image'})]
+        candidates=[t.get('content','').strip() for t in tags if t]
+        for el in soup.select('img[itemprop="image"], img[class*="cover"], img[class*="capa"], img[src*="capa"], img[src*="cover"]')[:12]:
+            url=el.get('data-src') or el.get('src') or ''
+            if url: candidates.append(url.strip())
+        from urllib.parse import urljoin
+        for candidate in candidates:
+            candidate=urljoin(page_url,candidate)
+            if candidate.startswith('https://') and urlparse(candidate).hostname:
+                value=candidate
+                break
     except (requests.RequestException,ValueError):
         pass
     _cover_cache[page_url]=(time.time(),value)
