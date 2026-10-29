@@ -129,44 +129,39 @@ def generated_music(number):
       [0,2,4,5,7,5,4,2], [0,4,9,7,5,4,2,0],
       [0,5,7,9,12,9,7,0],
     ]
+    # Quinze arranjos distintos: andamento, duração, registro e timbre variáveis.
     rate=11025
-    note_samples=rate//3
-    notes=motifs[number-1]*2
+    bpm=[66,82,108,57,94,74,122,68,88,100,62,116,70,96,80][number-1]
+    style=(number-1)%5
+    base=[196,220,246.94,174.61,261.63][style]
+    melody=motifs[number-1]
+    notes=(melody+list(reversed(melody)))*2
     out=io.BytesIO()
     with wave.open(out,'wb') as wav:
-        wav.setnchannels(1); wav.setsampwidth(2); wav.setframerate(rate)
-        for step in notes:
-            hz=220.0*2.0**(step/12.0)
+        wav.setnchannels(1);wav.setsampwidth(2);wav.setframerate(rate)
+        for index,step in enumerate(notes):
+            beats=(.5 if index%4==3 else 1.0) * (1.5 if index%7==0 else 1.0)
+            note_samples=int(rate*60/bpm*beats)
+            hz=base*2**(step/12)
             frames=bytearray()
             for i in range(note_samples):
                 t=i/rate
-                env=min(1.0,i/(rate*.025), (note_samples-i)/(rate*.075))
-                value=int(9500*max(0,env)*(math.sin(2*math.pi*hz*t)+.18*math.sin(2*math.pi*2*hz*t))/1.18)
-                frames.extend(struct.pack('<h',value))
+                attack=min(1.0,i/(rate*.03))
+                release=min(1.0,(note_samples-i)/(rate*.13))
+                envelope=max(0,min(attack,release))
+                phase=2*math.pi*hz*t
+                if style==0: wave_value=math.sin(phase)+.3*math.sin(phase*2)
+                elif style==1: wave_value=math.sin(phase)+.2*math.sin(phase*3)+.15*math.sin(phase*4)
+                elif style==2: wave_value=math.sin(phase)+.35*math.sin(phase*2)+.2*math.sin(phase*5)
+                elif style==3: wave_value=math.sin(phase)+.25*math.sin(phase*.5)
+                else: wave_value=math.sin(phase)+.2*math.sin(phase*2)+.1*math.sin(phase*6)
+                value=int(7000*envelope*wave_value/1.6)
+                frames.extend(struct.pack('<h',max(-32768,min(32767,value))))
             wav.writeframesraw(frames)
     out.seek(0)
-    return send_file(out,mimetype='audio/wav',download_name=f'livro-sem-fronteiras-{number:02d}.wav',max_age=86400)
-
-
-@app.get('/api/diagnostico')
-def diagnostico():
-    """Verifica recursos locais sem depender da conexão ao catálogo externo."""
-    from pathlib import Path
-    base=Path(__file__).resolve().parent
-    template=(base/'templates'/'index.html')
-    file_exists=template.is_file()
-    curated=curated_items()
-    return jsonify(
-        status='operacional' if file_exists else 'falha',
-        pagina_inicial=file_exists,
-        faixas_musicais=15,
-        audio_exemplo='/audio/1.wav',
-        musicas_tipo='arranjos instrumentais digitais WAV',
-        obras_editoriais=len(curated),
-        capas_cadastradas=sum(bool(i.get('cover_url') and i.get('cover_verified')) for i in curated),
-        sinopses_verificadas=sum(bool(i.get('summary') and i.get('summary_verified')) for i in curated),
-        aviso='A situação pública do Render deve ser confirmada após o deploy.'
-    )
+    response=send_file(out,mimetype='audio/wav',download_name=f'livro-sem-fronteiras-{number:02d}.wav')
+    response.headers['Cache-Control']='no-store'
+    return response
 
 @app.get('/api/health')
 def health():return jsonify(status='ok',service='livro-sem-fronteiras',catalog_source=SOURCE_URL)
