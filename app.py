@@ -175,7 +175,7 @@ def catalog():
         if enriched.get('source')=='Clube de Autores' and not enriched.get('cover_url'):
             cover=publisher_cover(enriched['url'])
             if cover:
-                enriched['cover_url']=cover
+                enriched['cover_preview_url']=cover
                 enriched['cover_verified']=False
         merged.append(enriched)
     # If upstream hasn't been fetched yet or is inaccessible, show only verified curated records.
