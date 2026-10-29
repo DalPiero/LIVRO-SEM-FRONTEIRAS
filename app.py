@@ -101,6 +101,7 @@ def catalog():
     extras=curated_items()
     extra_by_id={i['id'].lower():i for i in extras}
     extra_by_url={i['url'].rstrip('/').lower():i for i in extras}
+    enriched_count=0
     for item in state['items']+extras:
         key=item['id'].lower()
         if key in seen:continue
@@ -108,12 +109,13 @@ def catalog():
         enriched=dict(item)
         metadata=extra_by_id.get(key) or extra_by_url.get(item['url'].rstrip('/').lower())
         if metadata:
+            if item in state['items']: enriched_count+=1
             for field in ('language','author','edition','verified_at','source_url'):
                 if metadata.get(field):enriched[field]=metadata[field]
             if metadata.get('summary') and metadata.get('summary_verified'):enriched['summary']=metadata['summary'];enriched['summary_verified']=True
             if metadata.get('cover_url') and metadata.get('cover_verified'):enriched['cover_url']=metadata['cover_url'];enriched['cover_verified']=True
         merged.append(enriched)
     # If upstream hasn't been fetched yet or is inaccessible, show only verified curated records.
-    return jsonify(count=len(merged),source_count=len(state['items']),additional_count=len(merged)-len(state['items']),updated_at=state['updated_at'],warning=state['error'],items=merged)
+    return jsonify(count=len(merged),source_count=len(state['items']),additional_count=sum(1 for item in merged if item['id'].lower() not in {r['id'].lower() for r in state['items']}),enriched_count=enriched_count,updated_at=state['updated_at'],warning=state['error'],items=merged)
 
 if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.getenv('PORT','10000')))
