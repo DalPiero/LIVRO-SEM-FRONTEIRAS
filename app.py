@@ -105,6 +105,41 @@ def collect(force=False):
 @app.get('/')
 def home():return render_template('index.html')
 
+
+@app.get('/audio/<int:number>.wav')
+def generated_music(number):
+    """Arranjo instrumental digital original, sem arquivos binários externos."""
+    import io, math, struct, wave
+    from flask import send_file, abort
+    if number < 1 or number > 15: abort(404)
+    motifs = [
+      [0,2,4,7,9,7,4,2], [0,4,7,9,7,4,2,0],
+      [4,7,9,12,9,7,4,2], [0,2,5,7,5,2,0,-3],
+      [0,4,5,9,7,5,4,0], [0,5,7,12,9,7,5,2],
+      [0,2,4,9,7,4,2,0], [0,3,5,7,10,7,5,3],
+      [2,4,7,9,12,9,7,4], [0,5,9,12,9,5,4,0],
+      [0,2,7,9,7,5,2,0], [0,4,7,11,9,7,4,2],
+      [0,2,4,5,7,5,4,2], [0,4,9,7,5,4,2,0],
+      [0,5,7,9,12,9,7,0],
+    ]
+    rate=11025
+    note_samples=rate//3
+    notes=motifs[number-1]*2
+    out=io.BytesIO()
+    with wave.open(out,'wb') as wav:
+        wav.setnchannels(1); wav.setsampwidth(2); wav.setframerate(rate)
+        for step in notes:
+            hz=220.0*2.0**(step/12.0)
+            frames=bytearray()
+            for i in range(note_samples):
+                t=i/rate
+                env=min(1.0,i/(rate*.025), (note_samples-i)/(rate*.075))
+                value=int(9500*max(0,env)*(math.sin(2*math.pi*hz*t)+.18*math.sin(2*math.pi*2*hz*t))/1.18)
+                frames.extend(struct.pack('<h',value))
+            wav.writeframesraw(frames)
+    out.seek(0)
+    return send_file(out,mimetype='audio/wav',download_name=f'livro-sem-fronteiras-{number:02d}.wav',max_age=86400)
+
 @app.get('/api/health')
 def health():return jsonify(status='ok',service='livro-sem-fronteiras',catalog_source=SOURCE_URL)
 
