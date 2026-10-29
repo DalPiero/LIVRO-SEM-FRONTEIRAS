@@ -1,1 +1,58 @@
-[]
+[
+  {
+    "id": "ed-brasil-2026",
+    "title": "BRASIL 2026 — Per Omnia Secula Seculorum",
+    "url": "https://clubedeautores.com.br/livro/brasil-22",
+    "source": "Clube de Autores",
+    "source_url": "https://clubedeautores.com.br/livro/brasil-22",
+    "kind": "publicação",
+    "author": "Fernando Antonio Dal Piero",
+    "language": "pt",
+    "edition": "1ª edição (2026)",
+    "summary": "Romance político e metafísico que acompanha possíveis futuros do Brasil e questiona a normalização de abusos, os limites do poder e a responsabilidade democrática.",
+    "summary_verified": true,
+    "cover_verified": false
+  },
+  {
+    "id": "ed-fazer-tempo-viver",
+    "title": "2026 — O Ano de Fazer o Tempo Viver",
+    "url": "https://clubedeautores.com.br/livro/2026-o-ano-de-fazer-o-tempo-viver-2",
+    "source": "Clube de Autores",
+    "source_url": "https://clubedeautores.com.br/livro/2026-o-ano-de-fazer-o-tempo-viver-2",
+    "kind": "publicação",
+    "author": "Fernando Antonio Dal Piero",
+    "language": "pt",
+    "edition": "1ª edição (2026)",
+    "summary": "Coletânea de poemas, crônicas e reflexões sobre a consciência do tempo, a ação ética e a presença humana, com propostas de leitura ativa e ilustração de capítulos.",
+    "summary_verified": true,
+    "cover_verified": false
+  },
+  {
+    "id": "ed-cronicas-metafisico",
+    "title": "Crônicas de um Metafísico",
+    "url": "https://clubedeautores.com.br/livro/cronicas-de-um-metafisico-2",
+    "source": "Clube de Autores",
+    "source_url": "https://clubedeautores.com.br/livro/cronicas-de-um-metafisico-2",
+    "kind": "publicação",
+    "author": "Fernando Antonio Dal Piero",
+    "language": "pt",
+    "edition": "2ª edição (2026)",
+    "summary": "Travessia literária e filosófica por cinquenta séculos de história, da criação simbólica à técnica contemporânea, com reflexões sobre memória, ética e espiritualidade.",
+    "summary_verified": true,
+    "cover_verified": false
+  },
+  {
+    "id": "ed-brasil-ousamos",
+    "title": "O Brasil que Ainda Não Ousamos Ser",
+    "url": "https://clubedeautores.com.br/livro/o-brasil-que-ainda-nao-ousamos-ser",
+    "source": "Clube de Autores",
+    "source_url": "https://clubedeautores.com.br/livro/o-brasil-que-ainda-nao-ousamos-ser",
+    "kind": "publicação",
+    "author": "Fernando Antonio Dal Piero",
+    "language": "pt",
+    "edition": "1ª edição (2026)",
+    "summary": "Narrativa de personagens que enfrentam escolhas em educação, saúde, política e trabalho, acompanhada de poemas que convidam a refletir sobre dignidade e cidadania.",
+    "summary_verified": true,
+    "cover_verified": false
+  }
+]
