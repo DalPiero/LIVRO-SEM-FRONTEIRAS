@@ -62,6 +62,29 @@ def curated_items():
     return clean
 
 
+_cover_cache = {}
+def publisher_cover(page_url):
+    """Recupera somente a imagem declarada como capa social pela editora oficial."""
+    parsed=urlparse(page_url)
+    if parsed.hostname not in ('clubedeautores.com.br','www.clubedeautores.com.br'):
+        return ''
+    cache=_cover_cache.get(page_url)
+    if cache and time.time()-cache[0]<86400:
+        return cache[1]
+    value=''
+    try:
+        response=requests.get(page_url,timeout=7,headers={'User-Agent':'Mozilla/5.0 LivroSemFronteiras/1.0'})
+        response.raise_for_status()
+        soup=BeautifulSoup(response.text,'html.parser')
+        tag=soup.find('meta',attrs={'property':'og:image'}) or soup.find('meta',attrs={'name':'twitter:image'})
+        candidate=(tag.get('content','') if tag else '').strip()
+        if candidate.startswith('https://') and urlparse(candidate).hostname:
+            value=candidate
+    except (requests.RequestException,ValueError):
+        pass
+    _cover_cache[page_url]=(time.time(),value)
+    return value
+
 def collect(force=False):
     now=time.time()
     if not force and now < _cache['expires']:return dict(_cache)
@@ -114,6 +137,11 @@ def catalog():
                 if metadata.get(field):enriched[field]=metadata[field]
             if metadata.get('summary') and metadata.get('summary_verified'):enriched['summary']=metadata['summary'];enriched['summary_verified']=True
             if metadata.get('cover_url') and metadata.get('cover_verified'):enriched['cover_url']=metadata['cover_url'];enriched['cover_verified']=True
+        if enriched.get('source')=='Clube de Autores' and not enriched.get('cover_url'):
+            cover=publisher_cover(enriched['url'])
+            if cover:
+                enriched['cover_url']=cover
+                enriched['cover_verified']=True
         merged.append(enriched)
     # If upstream hasn't been fetched yet or is inaccessible, show only verified curated records.
     return jsonify(count=len(merged),source_count=len(state['items']),additional_count=sum(1 for item in merged if item['id'].lower() not in {r['id'].lower() for r in state['items']}),enriched_count=enriched_count,updated_at=state['updated_at'],warning=state['error'],items=merged)
