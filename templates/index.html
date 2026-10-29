@@ -52,7 +52,7 @@ async function playSelectedTrack(){stopFallback();musicPlayer.pause();musicPlaye
 document.getElementById('music-play').addEventListener('click',playSelectedTrack);
 
 document.getElementById('music-pause').addEventListener('click',()=>{musicPlayer.pause();stopFallback();});
-musicPlayer.addEventListener('ended',()=>{if(loopTrack.checked){musicPlayer.currentTime=0;musicPlayer.play().catch(()=>{});}else if(musicSelect.selectedIndex<musicSelect.options.length-1){musicSelect.selectedIndex++;setTrack();playSelectedTrack();}});
+musicPlayer.addEventListener('ended',()=>{if(loopTrack.checked){musicPlayer.currentTime=0;musicPlayer.play().catch(()=>playFallback());}else if(musicSelect.selectedIndex<musicSelect.options.length-1){musicSelect.selectedIndex++;setTrack();playSelectedTrack();}else{nowPlaying.textContent='As 15 faixas foram reproduzidas. Selecione outra música para ouvir novamente.';}});
 const langSelect=document.getElementById('language');document.getElementById('translate-page').addEventListener('click',()=>{const target=langSelect.value;if(target==='pt'){alert('O idioma original do portal é português.');return;}const url=window.location.href.startsWith('http')?window.location.href:'https://livro-sem-fronteiras-dal-piero.fadal573536.chatgpt.site/';const translation='https://translate.google.com/translate?sl=pt&tl='+encodeURIComponent(target)+'&u='+encodeURIComponent(url);window.open(translation,'_blank','noopener,noreferrer');});
 </script><script></script><script>
 (()=>{
