@@ -140,6 +140,27 @@ def generated_music(number):
     out.seek(0)
     return send_file(out,mimetype='audio/wav',download_name=f'livro-sem-fronteiras-{number:02d}.wav',max_age=86400)
 
+
+@app.get('/api/diagnostico')
+def diagnostico():
+    """Verifica recursos locais sem depender da conexão ao catálogo externo."""
+    from pathlib import Path
+    base=Path(__file__).resolve().parent
+    template=(base/'templates'/'index.html')
+    file_exists=template.is_file()
+    curated=curated_items()
+    return jsonify(
+        status='operacional' if file_exists else 'falha',
+        pagina_inicial=file_exists,
+        faixas_musicais=15,
+        audio_exemplo='/audio/1.wav',
+        musicas_tipo='arranjos instrumentais digitais WAV',
+        obras_editoriais=len(curated),
+        capas_cadastradas=sum(bool(i.get('cover_url') and i.get('cover_verified')) for i in curated),
+        sinopses_verificadas=sum(bool(i.get('summary') and i.get('summary_verified')) for i in curated),
+        aviso='A situação pública do Render deve ser confirmada após o deploy.'
+    )
+
 @app.get('/api/health')
 def health():return jsonify(status='ok',service='livro-sem-fronteiras',catalog_source=SOURCE_URL)
 
