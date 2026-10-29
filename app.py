@@ -92,6 +92,21 @@ def publisher_cover(page_url):
     _cover_cache[page_url]=(time.time(),value)
     return value
 
+@app.get('/capa/<int:numero>')
+def capa_editorial(numero):
+    from flask import abort, Response
+    livros=curated_items()
+    if numero<1 or numero>len(livros):abort(404)
+    url=publisher_cover(livros[numero-1]['url'])
+    if not url:abort(404)
+    try:
+        resp=requests.get(url,timeout=10,headers={'User-Agent':'Mozilla/5.0','Referer':livros[numero-1]['url']})
+        resp.raise_for_status()
+        mime=resp.headers.get('Content-Type','').split(';')[0].lower()
+        if mime not in ('image/jpeg','image/png','image/webp') or len(resp.content)>5000000:abort(404)
+        return Response(resp.content,mimetype=mime,headers={'Cache-Control':'public, max-age=3600'})
+    except requests.RequestException:abort(404)
+
 def collect(force=False):
     now=time.time()
     if not force and now < _cache['expires']:return dict(_cache)
@@ -198,7 +213,7 @@ def catalog():
         if enriched.get('source')=='Clube de Autores' and not enriched.get('cover_url'):
             cover=publisher_cover(enriched['url'])
             if cover:
-                enriched['cover_preview_url']=cover
+                enriched['cover_preview_url']='/capa/'+str(extras.index(metadata)+1) if metadata in extras else cover
                 enriched['cover_verified']=False
         merged.append(enriched)
     # If upstream hasn't been fetched yet or is inaccessible, show only verified curated records.
