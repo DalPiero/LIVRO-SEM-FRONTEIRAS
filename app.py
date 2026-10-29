@@ -12,13 +12,29 @@ _cache = {'items': [], 'updated_at': None, 'expires': 0, 'error': None}
 _lock = threading.Lock()
 
 
+
+def corrigir_codificacao(texto):
+    """Repara somente padrões inequívocos de UTF-8 interpretado como Latin-1."""
+    if not isinstance(texto,str):return texto
+    for _ in range(2):
+        if not any(x in texto for x in ('Ã','Â','â€','â€™','â€œ','â€“','â€”')):break
+        try:
+            novo=texto.encode('latin-1').decode('utf-8')
+        except (UnicodeError,ValueError):
+            try:novo=texto.encode('cp1252').decode('utf-8')
+            except (UnicodeError,ValueError):break
+        if novo==texto:break
+        texto=novo
+    return texto
+
+
 def source_items(html):
     soup = BeautifulSoup(html, 'html.parser')
     out = []
     seen = set()
     # Each original entry is a heading followed by a Google Drive link.
     for h in soup.find_all(re.compile('^h[2-6]$')):
-        title = h.get_text(' ', strip=True)
+        title = corrigir_codificacao(h.get_text(' ', strip=True))
         if not title or len(title) > 270: continue
         # Search in document order until next heading; the public catalogue has one link per title.
         link = None
@@ -44,7 +60,7 @@ def source_items(html):
             heading=parent.find(['h2','h3','h4']) if parent else None
             if not heading:continue
             seen.add(m.group(1))
-            out.append({'title':heading.get_text(' ',strip=True), 'url':href,'id':m.group(1),'source':'Catálogo público','kind':'arquivo'})
+            out.append({'title':corrigir_codificacao(heading.get_text(' ',strip=True)), 'url':href,'id':m.group(1),'source':'Catálogo público','kind':'arquivo'})
     return out
 
 
@@ -116,6 +132,7 @@ def collect(force=False):
         try:
             r=requests.get(SOURCE_URL,timeout=18,headers={'User-Agent':'LivroSemFronteirasCatalogo/1.0 (public-library-catalog)'})
             r.raise_for_status()
+            r.encoding=r.apparent_encoding if r.encoding is None or r.encoding.lower() in ('iso-8859-1','latin-1') else r.encoding
             items=source_items(r.text)
             if not items:raise ValueError('A página não forneceu registros de livros identificáveis.')
             _cache.update(items=items,updated_at=int(time.time()),expires=now+CACHE_SECONDS,error=None)
