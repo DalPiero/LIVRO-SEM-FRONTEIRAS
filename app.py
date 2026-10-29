@@ -58,7 +58,7 @@ def curated_items():
         if not isinstance(e,dict):continue
         title=str(e.get('title','')).strip(); url=str(e.get('url','')).strip()
         if not title or not url or urlparse(url).scheme != 'https':continue
-        clean.append({'title':title,'url':url,'id':str(e.get('id') or url),'source':str(e.get('source') or 'Inclusão editorial'),'kind':str(e.get('kind') or 'publicação'),'summary':str(e.get('summary') or '')[:1000],'cover_url':str(e.get('cover_url') or '') if str(e.get('cover_url') or '').startswith('https://') else '','language':str(e.get('language') or '')[:60],'author':str(e.get('author') or '')[:180],'summary_verified':bool(e.get('summary_verified',False)),'cover_verified':bool(e.get('cover_verified',False))})
+        clean.append({'title':title,'url':url,'id':str(e.get('id') or url),'source':str(e.get('source') or 'Inclusão editorial'),'kind':str(e.get('kind') or 'publicação'),'summary':str(e.get('summary') or '')[:1000],'cover_url':str(e.get('cover_url') or '') if str(e.get('cover_url') or '').startswith('https://') else '','language':str(e.get('language') or '')[:60],'author':str(e.get('author') or '')[:180],'summary_verified':bool(e.get('summary_verified',False)),'cover_verified':bool(e.get('cover_verified',False)),'source_url':str(e.get('source_url') or url) if urlparse(str(e.get('source_url') or url)).scheme=='https' else url,'edition':str(e.get('edition') or '')[:90],'verified_at':str(e.get('verified_at') or '')[:30]})
     return clean
 
 
@@ -85,6 +85,15 @@ def home():return render_template('index.html')
 @app.get('/api/health')
 def health():return jsonify(status='ok',service='livro-sem-fronteiras',catalog_source=SOURCE_URL)
 
+@app.get('/api/catalog-audit')
+def catalog_audit():
+    state=collect()
+    source=state['items']; curated=curated_items()
+    ids={i['id'].lower() for i in source}
+    verified_covers=sum(1 for i in curated if i.get('cover_verified') and i.get('cover_url'))
+    verified_summaries=sum(1 for i in curated if i.get('summary_verified') and i.get('summary'))
+    return jsonify(source_records=len(source),editorial_records=len(curated),new_records=sum(1 for i in curated if i['id'].lower() not in ids),verified_covers=verified_covers,verified_summaries=verified_summaries,source_warning=state['error'],last_source_sync=state['updated_at'])
+
 @app.get('/api/catalog')
 def catalog():
     state=collect()
@@ -99,7 +108,7 @@ def catalog():
         enriched=dict(item)
         metadata=extra_by_id.get(key) or extra_by_url.get(item['url'].rstrip('/').lower())
         if metadata:
-            for field in ('language','author'):
+            for field in ('language','author','edition','verified_at','source_url'):
                 if metadata.get(field):enriched[field]=metadata[field]
             if metadata.get('summary') and metadata.get('summary_verified'):enriched['summary']=metadata['summary'];enriched['summary_verified']=True
             if metadata.get('cover_url') and metadata.get('cover_verified'):enriched['cover_url']=metadata['cover_url'];enriched['cover_verified']=True
