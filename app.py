@@ -58,7 +58,7 @@ def curated_items():
         if not isinstance(e,dict):continue
         title=str(e.get('title','')).strip(); url=str(e.get('url','')).strip()
         if not title or not url or urlparse(url).scheme != 'https':continue
-        clean.append({'title':title,'url':url,'id':str(e.get('id') or url),'source':str(e.get('source') or 'Inclusão editorial'),'kind':str(e.get('kind') or 'publicação')})
+        clean.append({'title':title,'url':url,'id':str(e.get('id') or url),'source':str(e.get('source') or 'Inclusão editorial'),'kind':str(e.get('kind') or 'publicação'),'summary':str(e.get('summary') or '')[:1000],'cover_url':str(e.get('cover_url') or '') if str(e.get('cover_url') or '').startswith('https://') else ''})
     return clean
 
 
