@@ -58,7 +58,7 @@ def curated_items():
         if not isinstance(e,dict):continue
         title=str(e.get('title','')).strip(); url=str(e.get('url','')).strip()
         if not title or not url or urlparse(url).scheme != 'https':continue
-        clean.append({'title':title,'url':url,'id':str(e.get('id') or url),'source':str(e.get('source') or 'Inclusão editorial'),'kind':str(e.get('kind') or 'publicação'),'summary':str(e.get('summary') or '')[:1000],'cover_url':str(e.get('cover_url') or '') if str(e.get('cover_url') or '').startswith('https://') else ''})
+        clean.append({'title':title,'url':url,'id':str(e.get('id') or url),'source':str(e.get('source') or 'Inclusão editorial'),'kind':str(e.get('kind') or 'publicação'),'summary':str(e.get('summary') or '')[:1000],'cover_url':str(e.get('cover_url') or '') if str(e.get('cover_url') or '').startswith('https://') else '','language':str(e.get('language') or '')[:60],'author':str(e.get('author') or '')[:180],'summary_verified':bool(e.get('summary_verified',False)),'cover_verified':bool(e.get('cover_verified',False))})
     return clean
 
 
@@ -89,10 +89,21 @@ def health():return jsonify(status='ok',service='livro-sem-fronteiras',catalog_s
 def catalog():
     state=collect()
     merged=[]; seen=set()
-    for item in state['items']+curated_items():
+    extras=curated_items()
+    extra_by_id={i['id'].lower():i for i in extras}
+    extra_by_url={i['url'].rstrip('/').lower():i for i in extras}
+    for item in state['items']+extras:
         key=item['id'].lower()
         if key in seen:continue
-        seen.add(key); merged.append(item)
+        seen.add(key)
+        enriched=dict(item)
+        metadata=extra_by_id.get(key) or extra_by_url.get(item['url'].rstrip('/').lower())
+        if metadata:
+            for field in ('language','author'):
+                if metadata.get(field):enriched[field]=metadata[field]
+            if metadata.get('summary') and metadata.get('summary_verified'):enriched['summary']=metadata['summary'];enriched['summary_verified']=True
+            if metadata.get('cover_url') and metadata.get('cover_verified'):enriched['cover_url']=metadata['cover_url'];enriched['cover_verified']=True
+        merged.append(enriched)
     # If upstream hasn't been fetched yet or is inaccessible, show only verified curated records.
     return jsonify(count=len(merged),source_count=len(state['items']),additional_count=len(merged)-len(state['items']),updated_at=state['updated_at'],warning=state['error'],items=merged)
 
