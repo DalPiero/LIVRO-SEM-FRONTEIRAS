@@ -57,12 +57,32 @@ def join():
         else:
             if len(ROOMS)>=MAX_ROOMS:return failure("Limite temporário de salas atingido.",429)
             code=secrets.token_hex(4).upper()
-            room={"messages":[],"members":{},"seq":0,"at":time.time()}
+            room={"messages":[],"members":{},"seq":0,"at":time.time(),"owner":None,"callStates":{}}
             ROOMS[code]=room
         if len(room["members"])>=24:return failure("Sala cheia.",429)
         pid=secrets.token_urlsafe(24)
         room["members"][pid]={"name":name,"src":src,"listen":dst,"seen":time.time()}
-    return jsonify(room=code,pid=pid,name=name)
+        if room.get("owner") is None:
+            room["owner"]=pid
+            room["callStates"][pid]="accepted"
+        else:
+            room["callStates"][pid]="pending"
+    return jsonify(room=code,pid=pid,name=name,role="host" if room["owner"]==pid else "guest",callState=room["callStates"][pid])
+@app.post("/api/call-action")
+def call_action():
+    d=request.get_json(silent=True) or {}
+    action=d.get("action")
+    if action not in ("accepted","rejected","hold","later"):
+        return failure("Ação inválida.")
+    target=str(d.get("target",""))
+    with LOCK:
+        room=access(d)
+        if room is None:return failure("Sala inválida.",403)
+        if room["owner"]!=d.get("pid"):return failure("Somente quem iniciou a chamada pode responder.",403)
+        if target==room["owner"] or target not in room["members"]:
+            return failure("Convidado não encontrado.",404)
+        room["callStates"][target]=action
+    return jsonify(ok=True,callState=action)
 @app.post("/api/message")
 def message():
     d=request.get_json(silent=True) or {}
@@ -74,6 +94,7 @@ def message():
         if not room:return failure("Participante ou sala inválida.",403)
         pid=d["pid"]
         member=room["members"][pid]
+        if room["callStates"].get(pid)!="accepted":return failure("A chamada ainda não foi aceita ou está em espera.",403)
         room["seq"]+=1
         item={"id":room["seq"],"text":text,"src":member["src"],"name":member["name"],"ts":int(time.time())}
         room["messages"].append(item)
@@ -87,9 +108,13 @@ def poll():
     with LOCK:
         room=access(d)
         if not room:return failure("Sala encerrada ou inválida.",403)
-        msgs=[m for m in room["messages"] if m["id"]>since][-50:]
-        online=sum(time.time()-v["seen"]<45 for v in room["members"].values())
-    return jsonify(messages=msgs,online=online)
+        pid=str(d["pid"])
+        call_state=room["callStates"].get(pid,"pending")
+        host=room["owner"]==pid
+        incoming=[{"pid":other,"name":member["name"],"state":room["callStates"].get(other,"pending")} for other,member in room["members"].items() if other!=room["owner"] and room["callStates"].get(other) in ("pending","accepted","hold","later") and time.time()-member["seen"]<150] if host else []
+        msgs=([m for m in room["messages"] if m["id"]>since][-50:] if call_state=="accepted" else [])
+        online=sum(time.time()-v["seen"]<45 and room["callStates"].get(k)=="accepted" for k,v in room["members"].items())
+    return jsonify(messages=msgs,online=online,callState=call_state,incoming=incoming,host=host)
 @app.post("/api/translate")
 def translate():
     d=request.get_json(silent=True) or {}
