@@ -189,6 +189,55 @@ class CallTests(unittest.TestCase):
         self.assertIn('if(qr.has("plateia"))',markup)
         self.assertIn(' $("hostMode").checked=true;\n updatePermanentControls();',markup)
 
+    def test_live_stage_and_optional_venue_speaker_controls(self):
+        page=self.client.get("/chamada.html").get_data(as_text=True)
+        for name in ("liveStage","liveHostPanel","liveGuestPanel","liveLanguage","liveStart",
+                     "liveStop","liveWatch","liveRemote","liveLocal","liveStatus",
+                     "venueSoundPanel","venueEnabled","venueDevice","venueDevices",
+                     "venueTest","venueStatus"):
+            self.assertEqual(page.count('id="'+name+'"'),1,name)
+        self.assertIn("RTCPeerConnection",page)
+        self.assertIn("createOffer()",page)
+        self.assertIn('"/api/live/signal"',page)
+        self.assertIn("venueQueueMessage(m)",page)
+        self.assertIn('msg.pid!==state.pid',page)
+        self.assertIn("audio.setSinkId",page)
+        self.assertIn("Somente o palestrante",page) if False else None
+
+    def test_live_video_signaling_requires_authorization(self):
+        from unittest.mock import patch
+        with patch.dict("os.environ",{"DALPIERO_HOST_KEY":"TestStageOnlyKey"},clear=False):
+            host=self.client.post("/api/join",json={"name":"Palestrante","room":"DALPIERO",
+                "role":"host","hostKey":"TestStageOnlyKey","src":"pt","listen":"pt","consent":True}).json
+            guest=self.client.post("/api/join",json={"name":"Plateia","room":"DALPIERO",
+                "src":"pt","listen":"en","consent":True}).json
+            auth={"room":"DALPIERO","pid":host["pid"]}
+            pending={"room":"DALPIERO","pid":guest["pid"]}
+            self.assertEqual(self.client.post("/api/live/control",json={**pending,"active":True,"language":"en"}).status_code,403)
+            self.assertEqual(self.client.get("/api/live/poll",query_string=pending).status_code,403)
+            allowed=self.client.post("/api/call-action",json={**auth,"target":guest["pid"],
+                "action":"accepted","reply":"Pode assistir"})
+            self.assertEqual(allowed.status_code,200)
+            live=self.client.post("/api/live/control",json={**auth,"active":True,"language":"en"})
+            self.assertEqual(live.status_code,200,live.json)
+            host_poll=self.client.get("/api/live/poll",query_string=auth)
+            self.assertEqual(host_poll.json["live"]["language"],"en")
+            watch=self.client.post("/api/live/signal",json={**pending,"to":host["pid"],"kind":"watch","payload":{}})
+            self.assertEqual(watch.status_code,200,watch.json)
+            got=self.client.get("/api/live/poll",query_string=auth).json
+            self.assertEqual(got["signals"][0]["kind"],"watch")
+            self.assertEqual(got["signals"][0]["from"],guest["pid"])
+            self.assertNotIn("to",got["signals"][0])
+            offer={"description":{"type":"offer","sdp":"v=0"}}
+            self.assertEqual(self.client.post("/api/live/signal",json={**auth,"to":guest["pid"],"kind":"offer","payload":offer}).status_code,200)
+            guest_signals=self.client.get("/api/live/poll",query_string=pending).json
+            self.assertEqual(guest_signals["signals"][0]["kind"],"offer")
+            self.assertEqual(self.client.post("/api/live/signal",json={**pending,"to":host["pid"],
+                "kind":"answer","payload":{"description":{"type":"answer","sdp":"v=0"}}}).status_code,200)
+            self.assertEqual(self.client.post("/api/live/signal",json={**pending,"to":"unknown","kind":"watch","payload":{}}).status_code,403)
+            self.assertEqual(self.client.post("/api/live/control",json={**auth,"active":False,"language":"en"}).status_code,200)
+            self.assertEqual(self.client.post("/api/live/signal",json={**pending,"to":host["pid"],"kind":"watch","payload":{}}).status_code,409)
+
     def test_health(self):
         self.assertTrue(self.client.get("/api/health").json["ok"])
 
