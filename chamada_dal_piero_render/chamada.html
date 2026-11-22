@@ -12,6 +12,7 @@
 <div><label for="stageFormat">Formato do encontro</label><select id="stageFormat"><option value="presencial">📍 Presencial — plateia no mesmo ambiente</option><option value="remoto">🌐 Remoto — pessoas em outros locais</option></select></div>
 <div><label for="stageLanguage">Idioma nativo do palestrante</label><select id="stageLanguage"></select></div>
 </div>
+<div class="language-field" style="margin:12px 0 5px"><label for="stageListen">🎧 Idioma de escuta da plateia</label><select id="stageListen" aria-describedby="stageListenHelp"></select><span id="stageListenHelp" class="field-hint">Idioma inicial do convite. Cada participante poderá escolher outro idioma no próprio aparelho.</span></div>
 <div class="stage-path" id="stageFormatHelp">Plateia presencial: divulgue o link da sala, peça fones e mantenha o áudio dos alto-falantes desligado para evitar eco.</div>
 <div class="record-controls">
 <button id="stageSpeaker" class="green" type="button">🎙️ Sou palestrante — configurar sala</button>
@@ -225,10 +226,17 @@ $("listen").addEventListener("change",updateLanguageFeedback);
 updateLanguageFeedback();
 const qr=new URLSearchParams(location.search);if(qr.has("plateia"))document.documentElement.dataset.audience="1";if(qr.has("s"))$("roomInput").value=qr.get("s").toUpperCase();
 const STAGE_BASE_URL="https://chamada-traduzida-dal-piero.onrender.com/chamada.html?s=DALPIERO&plateia=1";
+function stageAudienceUrl(){return STAGE_BASE_URL+"&idioma="+encodeURIComponent($("stageListen").value);}
+function updateStageAudienceLink(){$("stageInviteUrl").value=stageAudienceUrl();}
 for(const [key,label] of Object.entries(LANGS)){
  const option=document.createElement("option");option.value=key;option.textContent=label;$("stageLanguage").append(option);
+ const audienceOption=option.cloneNode(true);$("stageListen").append(audienceOption);
 }
 $("stageLanguage").value="pt";
+$("stageListen").value="es";
+$("stageListen").addEventListener("change",()=>{updateStageAudienceLink();const live=$("liveLanguage");if(live&&Array.from(live.options).some(o=>o.value===$("stageListen").value))live.value=$("stageListen").value;});
+if(qr.has("plateia")&&qr.has("idioma")&&Object.prototype.hasOwnProperty.call(LANGS,qr.get("idioma"))){$("listen").value=qr.get("idioma");updateLanguageFeedback();}
+updateStageAudienceLink();
 $("openStage").onclick=()=>{
  const opening=$("stageSetup").classList.contains("hidden");
  $("stageSetup").classList.toggle("hidden",!opening);
@@ -242,7 +250,7 @@ $("stageFormat").onchange=()=>{
 };
 function stageInvitation(){
  return "🌍 PALESTRA MULTILÍNGUE DAL PIERO — "+($("stageFormat").value==="remoto"?"REMOTA":"PRESENCIAL")+"\n"
- + "Acesse: "+STAGE_BASE_URL+"\n"
+ + "Acesse: "+stageAudienceUrl()+"\n"
  + "1. Informe seu nome. 2. Escolha seu idioma em EU ESCUTO. 3. Entre na sala DALPIERO. 4. Aguarde autorização. 5. Toque em Ativar áudio para ouvir a tradução.\n"
  + "Use fones de ouvido. A tradução depende do navegador e não é transmissão contínua de áudio ou vídeo.";
 }
@@ -261,6 +269,8 @@ $("stageSpeaker").onclick=()=>{
 $("stageAudience").onclick=()=>{
  $("roomInput").value="DALPIERO";
  $("hostMode").checked=false;
+ $("listen").value=$("stageListen").value;
+ updateLanguageFeedback();
  updatePermanentControls();
  $("stageSetup").classList.add("hidden");
  $("openStage").setAttribute("aria-expanded","false");
@@ -1325,7 +1335,7 @@ function liveMessage(message){$("liveStatus").textContent=message;}
 function setupLiveRole(){
  $("liveHostPanel").classList.toggle("hidden",!state.host);
  $("liveGuestPanel").classList.toggle("hidden",state.host);
- if(state.host)$("liveLanguage").value=$("stageLanguage").value==="pt"?"en":$("stageLanguage").value;
+ if(state.host){const target=$("stageListen").value;const live=$("liveLanguage");live.value=Array.from(live.options).some(o=>o.value===target)?target:($("stageLanguage").value==="pt"?"en":$("stageLanguage").value);}
  if(liveRoom.timer)clearInterval(liveRoom.timer);
  liveRoom.timer=setInterval(pollLive,1400);
  pollLive();
