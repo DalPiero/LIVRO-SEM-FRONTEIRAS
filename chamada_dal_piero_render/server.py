@@ -1,4 +1,4 @@
-import os, re, time, secrets, json, threading, html
+import os, re, time, secrets, json, threading, html, ipaddress
 from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -30,6 +30,66 @@ def icon():
 @app.get("/manifest.webmanifest")
 def manifest():
     return jsonify(name="Chamada Traduzida Dal Piero",short_name="Chamada Dal Piero",start_url="/chamada.html",scope="/",display="standalone",theme_color="#10223d",background_color="#10223d",icons=[{"src":"/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}])
+# Language greeting is based on an approximate public IP country, never on precise GPS.
+# Only the country code is returned to the browser; the IP is not persisted here.
+COUNTRY_LANG = {
+    "BR":"pt", "PT":"pt", "AO":"pt", "MZ":"pt", "CV":"pt",
+    "ES":"es", "MX":"es", "AR":"es", "CO":"es", "CL":"es", "PE":"es",
+    "UY":"es", "PY":"es", "EC":"es", "BO":"es", "VE":"es", "CR":"es",
+    "PA":"es", "CU":"es", "DO":"es", "GT":"es", "HN":"es", "NI":"es",
+    "SV":"es", "PR":"es",
+    "FR":"fr", "BE":"fr", "LU":"fr", "MC":"fr",
+    "IT":"it", "SM":"it", "VA":"it",
+    "DE":"de", "AT":"de", "CH":"de", "LI":"de",
+    "CN":"zh-CN", "TW":"zh-TW", "HK":"zh-TW", "MO":"zh-TW",
+    "JP":"ja", "KR":"ko", "RU":"ru", "UA":"uk",
+    "NL":"nl", "TR":"tr", "PL":"pl", "ID":"id",
+    "VN":"vi", "TH":"th", "IN":"hi", "BD":"bn",
+    "SA":"ar", "AE":"ar", "EG":"ar", "MA":"ar",
+    "DZ":"ar", "TN":"ar", "QA":"ar", "KW":"ar", "JO":"ar",
+    "IL":"he", "IR":"fa", "KE":"sw", "TZ":"sw"
+}
+def public_client_ip():
+    # Forwarded IP is a best-effort hint behind Render's reverse proxy.
+    # It is used only for greeting language, never for access control.
+    forwarded=request.headers.get("X-Forwarded-For","")
+    candidates=[part.strip() for part in forwarded.split(",")[:5]]
+    candidates.append(request.remote_addr or "")
+    for value in candidates:
+        try:
+            ip=ipaddress.ip_address(value)
+            if ip.is_global:
+                return str(ip)
+        except ValueError:
+            continue
+    return None
+
+@app.get("/api/greeting-language")
+def greeting_language():
+    country=""
+    provider_headers=("CF-IPCountry","X-Vercel-IP-Country","CloudFront-Viewer-Country")
+    for name in provider_headers:
+        candidate=request.headers.get(name,"").strip().upper()
+        if len(candidate)==2 and candidate.isalpha():
+            country=candidate
+            break
+    if not country:
+        ip=public_client_ip()
+        if ip:
+            try:
+                req=Request("https://ipwho.is/"+ip+"?fields=success,country_code",
+                            headers={"User-Agent":"ChamadaDalPiero/1.1"})
+                with urlopen(req,timeout=2.5) as response:
+                    payload=json.load(response)
+                if payload.get("success") and re.fullmatch(r"[A-Z]{2}",payload.get("country_code","")):
+                    country=payload["country_code"]
+            except Exception:
+                pass
+    if not country:
+        return jsonify(language=None,country=None,source="browser",supported=False)
+    lang=COUNTRY_LANG.get(country,"en")
+    return jsonify(language=lang,country=country,source="ip",supported=True)
+
 @app.get("/api/health")
 def health():
     return jsonify(ok=True,app="Chamada Traduzida Dal Piero",experimental=True)
