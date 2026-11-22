@@ -11,6 +11,8 @@ ROOMS={}
 LOCK=threading.RLock()
 LANG={"pt","es","en","it","de","zh-CN","zh-TW"}
 MAX_ROOMS=300
+PERMANENT_CODE="DALPIERO"
+HOST_KEY_ENV="DALPIERO_HOST_KEY"
 def clean():
     now=time.time()
     for key in list(ROOMS):
@@ -49,25 +51,54 @@ def join():
     if not name:return failure("Informe seu nome.")
     if src not in LANG or dst not in LANG:return failure("Idioma não disponível.")
     code=str(d.get("room","")).strip().upper()
+    permanent=code==PERMANENT_CODE
+    wants_host=d.get("role")=="host"
+    if wants_host and not permanent:return failure("O acesso de responsável é exclusivo da sala permanente.",403)
+    if permanent and wants_host:
+        expected=os.getenv(HOST_KEY_ENV,"")
+        supplied=str(d.get("hostKey",""))
+        if not expected or not secrets.compare_digest(supplied,expected):
+            return failure("Código reservado ao responsável incorreto.",403)
     with LOCK:
         clean()
         if code:
             room=ROOMS.get(code)
-            if room is None:return failure("Sala não encontrada. Solicite um novo convite.",404)
+            if room is None:
+                if not permanent:return failure("Sala não encontrada. Solicite um novo convite.",404)
+                room={"messages":[],"members":{},"seq":0,"at":time.time(),"owner":None,"callStates":{},"callReplies":{}}
+                ROOMS[code]=room
         else:
             if len(ROOMS)>=MAX_ROOMS:return failure("Limite temporário de salas atingido.",429)
             code=secrets.token_hex(4).upper()
             room={"messages":[],"members":{},"seq":0,"at":time.time(),"owner":None,"callStates":{},"callReplies":{}}
             ROOMS[code]=room
+        if permanent:
+            stale=[key for key,item in room["members"].items() if time.time()-item["seen"]>1800]
+            for key in stale:
+                room["members"].pop(key,None)
+                room["callStates"].pop(key,None)
+                room["callReplies"].pop(key,None)
+            if room["owner"] not in room["members"]:room["owner"]=None
         if len(room["members"])>=24:return failure("Sala cheia.",429)
         pid=secrets.token_urlsafe(24)
         room["members"][pid]={"name":name,"src":src,"listen":dst,"seen":time.time(),"subject":"","acceptedFrom":0}
-        if room.get("owner") is None:
+        if permanent:
+            if wants_host:
+                old=room.get("owner")
+                if old and old in room["members"]:
+                    room["callStates"][old]="later"
+                    room["callReplies"][old]="O responsável assumiu a sala em outro dispositivo."
+                room["owner"]=pid
+                room["callStates"][pid]="accepted"
+                room["members"][pid]["acceptedFrom"]=room["seq"]
+            else:
+                room["callStates"][pid]="pending"
+        elif room.get("owner") is None:
             room["owner"]=pid
             room["callStates"][pid]="accepted"
         else:
             room["callStates"][pid]="pending"
-    return jsonify(room=code,pid=pid,name=name,role="host" if room["owner"]==pid else "guest",callState=room["callStates"][pid])
+    return jsonify(room=code,pid=pid,name=name,permanent=permanent,role="host" if room["owner"]==pid else "guest",callState=room["callStates"][pid])
 @app.post("/api/call-action")
 def call_action():
     d=request.get_json(silent=True) or {}
