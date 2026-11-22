@@ -7,7 +7,7 @@
 <section class="card"><h2>📱 Instalar nos aparelhos</h2><button id="installBtn">Instalar aplicativo (se disponível)</button><details><summary>Como instalar no Android</summary><p>Abra este link HTTPS no Chrome. No menu ⋮, escolha “Instalar aplicativo” ou “Adicionar à tela inicial”.</p></details><details><summary>Como instalar no iPhone</summary><p>Abra este link HTTPS no Safari. Toque em Compartilhar → Adicionar à Tela de Início.</p></details></section>
 <footer class="card"><h2>Como funciona e privacidade</h2><details open><summary>Para quem faz a chamada</summary><p>Informe seu nome, escolha os idiomas, aceite as condições e crie uma sala. Envie o link por WhatsApp. Quando o convidado entrar, assinale uma resposta em Chamadas recebidas e clique em Enviar resposta selecionada. Ao aceitar, ative o microfone. Fale em frases curtas e aguarde a reprodução traduzida.</p></details><details><summary>Para quem recebe a chamada</summary><p>Abra o link HTTPS, confira a identificação da Chamada Dal Piero, informe seu nome, escolha seu idioma de fala e o idioma que deseja ouvir. Leia o aviso de privacidade. Envie o assunto da chamada por escrito e aguarde a autorização de quem criou a sala. Depois de receber a confirmação, ative o microfone para responder.</p></details><details><summary>Política de privacidade e limitações</summary><p>Esta é uma versão experimental. Ao participar, nome, idioma, transcrição, código da sala e identificador de acesso são processados pelo servidor da chamada. Textos podem ser enviados a serviços externos de tradução, como MyMemory. O reconhecimento e a síntese de voz podem utilizar serviços do próprio navegador ou sistema operacional. As mensagens ficam temporariamente na memória do servidor, podem ser vistas pelos integrantes da sala e se perdem no reinício ou expiração da sessão. Participantes podem salvar cópias das transcrições. Esta página não grava áudio automaticamente. Alertas sonoros e notificações do navegador funcionam apenas quando autorizados pelo usuário e com a página aberta; não são notificações push com o aplicativo fechado. Não divulgue dados pessoais sensíveis, senhas nem informações confidenciais. A precisão, disponibilidade e privacidade dos fornecedores externos devem ser avaliadas antes de uso profissional. Não há criptografia ponta a ponta garantida entre participantes: a comunicação usa HTTPS até o servidor.</p></details><p>Contato informado: <a href="mailto:fadal@miriamgoncalves.org">fadal@miriamgoncalves.org</a>. O e-mail é apenas contato; a hospedagem não modifica as configurações do domínio.</p><p>Professor Doutor Fernando Antonio Dal Piero · Ciência, educação e tecnologia.</p></footer>
 </main><script>
-const $=id=>document.getElementById(id),LANGS={"pt":"Português (Brasil)","es":"Espanhol","en":"Inglês","it":"Italiano","de":"Alemão","zh-CN":"Mandarim (simplificado)","zh-TW":"Mandarim (tradicional)"},locale={"pt":"pt-BR","es":"es-ES","en":"en-US","it":"it-IT","de":"de-DE","zh-CN":"zh-CN","zh-TW":"zh-TW"};let state={room:"",pid:"",since:0,joined:false,host:false,callState:"pending",reply:"",pollBusy:false,voices:[],recognition:null,micOn:false,seen:new Set(),pendingInstall:null,selection:{},alerted:new Set(),alertsEnabled:false,audioCtx:null,pendingCount:0};
+const $=id=>document.getElementById(id),LANGS={"pt":"Português (Brasil)","es":"Espanhol","en":"Inglês","it":"Italiano","de":"Alemão","zh-CN":"Mandarim (simplificado)","zh-TW":"Mandarim (tradicional)"},locale={"pt":"pt-BR","es":"es-ES","en":"en-US","it":"it-IT","de":"de-DE","zh-CN":"zh-CN","zh-TW":"zh-TW"};let state={room:"",pid:"",since:0,joined:false,host:false,callState:"pending",reply:"",pollBusy:false,voices:[],recognition:null,micOn:false,seen:new Set(),pendingInstall:null,selection:{},alerted:new Set(),alertsEnabled:false,audioCtx:null,pendingCount:0,currentPending:[]};
 for(const id of ["src","listen"]){$(id).innerHTML=Object.entries(LANGS).map(([k,v])=>'<option value="'+k+'">'+v+'</option>').join("");}
 $("listen").value="pt";const qr=new URLSearchParams(location.search);if(qr.has("s"))$("roomInput").value=qr.get("s").toUpperCase();
 function showError(m){$("callError").textContent=m;}
@@ -73,6 +73,7 @@ function refreshPendingAlert(rows){
  const newPending=pending.filter(e=>!state.alerted.has(e.pid));
  for(const entry of newPending){state.alerted.add(entry.pid);showIncomingNotice(entry);}
  state.pendingCount=pending.length;
+ state.currentPending=pending;
  $("pendingBadge").textContent=pending.length?"("+pending.length+" aguardando)":"";
  $("incomingAlert").hidden=pending.length===0;
  $("incomingAlertText").textContent=pending.length===1?pending[0].name+" está chamando!":pending.length+" chamadas aguardando!";
@@ -80,19 +81,22 @@ function refreshPendingAlert(rows){
 }
 $("enableAlerts").onclick=async()=>{
  state.alertsEnabled=true;
+ let permissionPromise=null;
+ if("Notification" in window){
+   try{permissionPromise=Notification.permission==="default"?Notification.requestPermission():Promise.resolve(Notification.permission);}
+   catch{permissionPromise=Promise.resolve("unavailable");}
+ }
  try{
    const AudioCtor=window.AudioContext||window.webkitAudioContext;
-   if(AudioCtor){state.audioCtx=state.audioCtx||new AudioCtor();await state.audioCtx.resume();}
+   if(AudioCtor){state.audioCtx=state.audioCtx||new AudioCtor();state.audioCtx.resume().catch(()=>{});}
  }catch{}
  let notice="Som ativado (quando permitido pelo aparelho).";
- if("Notification" in window){
-   try{
-     const permission=Notification.permission==="default"?await Notification.requestPermission():Notification.permission;
-     notice+=permission==="granted"?" Notificações autorizadas.":permission==="denied"?" Notificações bloqueadas nas configurações do navegador.":" As notificações dependem do navegador.";
-   }catch{notice+=" Não foi possível solicitar permissão de notificações.";}
+ if(permissionPromise){
+   try{const permission=await permissionPromise;notice+=permission==="granted"?" Notificações autorizadas.":permission==="denied"?" Notificações bloqueadas nas configurações do navegador.":" As notificações dependem do navegador.";}
+   catch{notice+=" Não foi possível solicitar permissão de notificações.";}
  }else notice+=" Notificações do sistema indisponíveis neste navegador.";
  alertStatus(notice+" Mantenha o aplicativo aberto.");
- playRing();
+ if(state.currentPending.length)showIncomingNotice(state.currentPending[0]);else playRing();
 };
 $("testAlerts").onclick=()=>{
  if(!state.alertsEnabled){alertStatus("Ative o som antes de testar.");return;}
