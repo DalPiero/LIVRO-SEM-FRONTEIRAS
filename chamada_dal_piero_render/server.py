@@ -235,6 +235,92 @@ def poll():
         online=sum(time.time()-v["seen"]<45 and room["callStates"].get(k)=="accepted" for k,v in room["members"].items())
         participants=([{"name":v["name"],"speak":v["src"],"listen":v["listen"],"online":time.time()-v["seen"]<45,"host":k==room["owner"]} for k,v in room["members"].items() if room["callStates"].get(k)=="accepted" and time.time()-v["seen"]<180] if call_state=="accepted" else [])
     return jsonify(messages=msgs,online=online,participants=participants,callState=call_state,callReply=room["callReplies"].get(pid,""),incoming=incoming,host=host)
+# Experimental one-to-few live WebRTC signaling. No media or SDP is stored on disk.
+# Signaling is only accessible to authorized members of the same in-memory room.
+LIVE_SIGNALS_MAX=400
+LIVE_VIEWERS_MAX=5
+@app.post("/api/live/control")
+def live_control():
+    d=request.get_json(silent=True) or {}
+    language=d.get("language","en")
+    active=d.get("active")
+    if type(active) is not bool or language not in LANG:
+        return failure("Configuração de transmissão inválida.")
+    with LOCK:
+        room=access(d)
+        if not room or room["owner"]!=str(d.get("pid","")):
+            return failure("Somente o responsável pode iniciar o vídeo ao vivo.",403)
+        if room["callStates"].get(str(d["pid"]))!="accepted":
+            return failure("Responsável não autorizado.",403)
+        room["live"]={"active":active,"language":language,"host":str(d["pid"]),"startedAt":int(time.time()) if active else 0}
+        room["signals"]=[]
+        room["signalSeq"]=0
+        if active:
+            room["liveViewers"]={}
+        else:
+            room.pop("liveViewers",None)
+        state=room["live"].copy()
+    return jsonify(ok=True,live=state)
+
+@app.post("/api/live/signal")
+def live_signal():
+    d=request.get_json(silent=True) or {}
+    target=str(d.get("to",""))
+    kind=d.get("kind","")
+    payload=d.get("payload",{})
+    if kind not in ("watch","offer","answer","ice","bye"):
+        return failure("Tipo de sinal inválido.")
+    if not isinstance(payload,dict) or len(json.dumps(payload,ensure_ascii=False))>18000:
+        return failure("Sinal de mídia muito grande ou inválido.")
+    with LOCK:
+        room=access(d)
+        sender=str(d.get("pid",""))
+        if not room or room["callStates"].get(sender)!="accepted":
+            return failure("Participante não autorizado.",403)
+        live=room.get("live") or {}
+        if not live.get("active") or live.get("host")!=room.get("owner"):
+            return failure("Não existe transmissão ao vivo ativa.",409)
+        if target not in room["members"] or room["callStates"].get(target)!="accepted" or sender==target:
+            return failure("Destinatário não autorizado.",403)
+        host=room["owner"]
+        if kind=="watch":
+            if sender==host or target!=host:return failure("Solicitação de plateia inválida.",403)
+            viewers=room.setdefault("liveViewers",{})
+            now=time.time()
+            viewers={k:v for k,v in viewers.items() if now-v<45}
+            room["liveViewers"]=viewers
+            if sender not in viewers and len(viewers)>=LIVE_VIEWERS_MAX:
+                return failure("Limite experimental de cinco espectadores simultâneos.",429)
+            viewers[sender]=now
+        elif kind=="offer":
+            if sender!=host or target not in room.get("liveViewers",{}):
+                return failure("Somente o palestrante pode ofertar vídeo a espectadores ativos.",403)
+        elif kind in ("answer","ice","bye"):
+            if sender!=host and target!=host:return failure("Sinal deve envolver o palestrante.",403)
+            if sender!=host and sender not in room.get("liveViewers",{}):
+                return failure("Espectador não registrado.",403)
+        room["signalSeq"]=room.get("signalSeq",0)+1
+        item={"id":room["signalSeq"],"from":sender,"to":target,"kind":kind,"payload":payload}
+        room.setdefault("signals",[]).append(item)
+        room["signals"]=room["signals"][-LIVE_SIGNALS_MAX:]
+    return jsonify(ok=True,id=item["id"])
+
+@app.get("/api/live/poll")
+def live_poll():
+    try:since=max(0,int(request.args.get("since",0)))
+    except (ValueError,TypeError):since=0
+    with LOCK:
+        room=access(request.args)
+        pid=str(request.args.get("pid",""))
+        if not room or room["callStates"].get(pid)!="accepted":
+            return failure("Participante não autorizado.",403)
+        live=room.get("live") or {"active":False,"language":"en"}
+        signals=[{k:v for k,v in x.items() if k!="to"} for x in room.get("signals",[]) if x["to"]==pid and x["id"]>since][-80:]
+        latest=room.get("signalSeq",0)
+        if pid!=room.get("owner") and pid in room.get("liveViewers",{}):
+            room["liveViewers"][pid]=time.time()
+    return jsonify(live=live,signals=signals,latest=latest)
+
 @app.post("/api/translate")
 def translate():
     d=request.get_json(silent=True) or {}
