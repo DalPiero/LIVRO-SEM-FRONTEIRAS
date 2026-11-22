@@ -104,6 +104,30 @@ class CallTests(unittest.TestCase):
             self.assertEqual(response.json["country"],"AR")
             lookup.assert_called_once()
 
+    def test_italian_to_portuguese_call_flow(self):
+        from unittest.mock import patch
+        from io import BytesIO
+        with patch.dict("os.environ",{"DALPIERO_HOST_KEY":"SampleSecret"},clear=False):
+            host=self.client.post("/api/join",json={"name":"Responsavel","room":"DALPIERO","role":"host","hostKey":"SampleSecret","src":"pt","listen":"pt","consent":True}).json
+            phone=self.client.post("/api/join",json={"name":"Visitante italiano","room":"DALPIERO","src":"it","listen":"it","consent":True}).json
+            self.assertEqual(phone["callState"],"pending")
+            action=self.client.post("/api/call-action",json={"room":"DALPIERO","pid":host["pid"],"target":phone["pid"],"action":"accepted","reply":"Chamada autorizada"})
+            self.assertEqual(action.status_code,200)
+            spoken=self.client.post("/api/message",json={"room":"DALPIERO","pid":phone["pid"],"text":"Buongiorno, professore."})
+            self.assertEqual(spoken.status_code,200)
+            received=self.client.get("/api/poll",query_string={"room":"DALPIERO","pid":host["pid"],"since":0}).json
+            self.assertEqual(received["messages"][0]["src"],"it")
+            self.assertEqual(received["messages"][0]["text"],"Buongiorno, professore.")
+            self.assertEqual(received["messages"][0]["pid"],phone["pid"])
+            class Translation:
+                def __enter__(self):return BytesIO(b'{"responseStatus":200,"responseData":{"translatedText":"Bom dia, professor."}}')
+                def __exit__(self,*args):return False
+            with patch("server.urlopen",return_value=Translation()) as translated:
+                response=self.client.post("/api/translate",json={"text":"Buongiorno, professore.","src":"it","to":"pt"})
+                self.assertEqual(response.status_code,200)
+                self.assertEqual(response.json["text"],"Bom dia, professor.")
+                self.assertIn("it%7Cpt",translated.call_args.args[0].full_url)
+
     def test_invalid_requests(self):
         self.assertEqual(self.client.post("/api/join",json={"name":"Anon","consent":False}).status_code,400)
         self.assertEqual(self.client.post("/api/join",json={"name":"Anon","room":"BAD","consent":True}).status_code,404)
