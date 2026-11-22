@@ -103,6 +103,17 @@ class CallTests(unittest.TestCase):
             self.assertEqual(len(got["messages"]),5)
             self.assertEqual([x["src"] for x in got["messages"]],[x[0] for x in chosen])
 
+    def test_dub_create_button_clickable_and_local_import(self):
+        page=self.client.get("/chamada.html").get_data(as_text=True)
+        self.assertIn('<button id="filmDubCreate" type="button" class="green">',page)
+        self.assertNotIn('<button id="filmDubCreate" type="button" class="green" disabled>',page)
+        self.assertEqual(page.count('id="filmUpload"'),1)
+        self.assertIn('file.type.startsWith("video/")',page)
+        self.assertIn('recorderStudio.blob=file',page)
+        self.assertIn('dubStatus("📝 Falta uma legenda.',page)
+        self.assertIn('dubStatus("📹 Primeiro grave',page)
+        self.assertIn('$("filmDubCreate").disabled=busy;',page)
+
     def test_film_dubbing_ui_and_russian_translation_support(self):
         markup=self.client.get("/chamada.html").get_data(as_text=True)
         for element in ("filmDubPanel","filmDubLanguage","filmDubMix","filmDubCreate","filmDubSave",
