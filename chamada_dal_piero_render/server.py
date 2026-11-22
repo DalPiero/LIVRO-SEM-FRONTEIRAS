@@ -1,15 +1,15 @@
-import os, re, time, secrets, json, threading, html, ipaddress
+import os, re, time, secrets, json, threading, html, ipaddress, asyncio
 from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response
 
 BASE=Path(__file__).resolve().parent
 app=Flask(__name__,static_folder=None)
 app.config["MAX_CONTENT_LENGTH"]=16000
 ROOMS={}
 LOCK=threading.RLock()
-LANG={"pt","es","en","it","de","zh-CN","zh-TW"}
+LANG={"pt","es","en","it","de","ru","zh-CN","zh-TW"}
 MAX_ROOMS=300
 PERMANENT_CODE="DALPIERO"
 HOST_KEY_ENV="DALPIERO_HOST_KEY"
@@ -254,6 +254,53 @@ def translate():
         return jsonify(text=translated,engine="MyMemory; tradução experimental")
     except Exception:
         return failure("O serviço de tradução está indisponível. Tente novamente.",503)
+# On-demand neural narration for short, user-approved film-caption segments.
+# Processing is temporary: raw text and generated MP3 are not saved to disk.
+TTS_VOICES={
+    "pt":"pt-BR-FranciscaNeural", "en":"en-US-AriaNeural",
+    "es":"es-ES-ElviraNeural", "it":"it-IT-ElsaNeural",
+    "de":"de-DE-KatjaNeural", "ru":"ru-RU-SvetlanaNeural",
+    "zh-CN":"zh-CN-XiaoxiaoNeural", "zh-TW":"zh-TW-HsiaoChenNeural"
+}
+TTS_GATE=threading.BoundedSemaphore(2)
+TTS_TIMES=[]
+@app.post("/api/film-voice")
+def film_voice():
+    d=request.get_json(silent=True) or {}
+    phrase=d.get("text","")
+    target=d.get("language","pt")
+    if not isinstance(phrase,str) or not 1<=len(phrase.strip())<=250:
+        return failure("Cada narração deve conter de 1 a 250 caracteres.")
+    if target not in TTS_VOICES:
+        return failure("Idioma de narração não disponível.")
+    if not TTS_GATE.acquire(blocking=False):
+        return failure("Serviço de narração ocupado. Tente novamente.",429)
+    try:
+        with LOCK:
+            now=time.monotonic()
+            TTS_TIMES[:]=[x for x in TTS_TIMES if now-x<60]
+            if len(TTS_TIMES)>=30:
+                return failure("Limite temporário de narrações atingido. Tente novamente.",429)
+            TTS_TIMES.append(now)
+        try:
+            import edge_tts
+            async def generate():
+                voice=edge_tts.Communicate(phrase.strip(),TTS_VOICES[target])
+                chunks=[]
+                async for item in voice.stream():
+                    if item.get("type")=="audio":
+                        chunks.append(item["data"])
+                        if sum(map(len,chunks))>1_500_000:
+                            raise ValueError("Arquivo de voz muito grande")
+                return b"".join(chunks)
+            audio=asyncio.run(asyncio.wait_for(generate(),timeout=24))
+            if not audio:return failure("O serviço de voz não produziu áudio.",503)
+            return Response(audio,mimetype="audio/mpeg",headers={"Cache-Control":"no-store","X-Content-Type-Options":"nosniff"})
+        except Exception:
+            return failure("Serviço externo de voz indisponível. Preserve as legendas e tente novamente.",503)
+    finally:
+        TTS_GATE.release()
+
 @app.route("/api/export",methods=["GET","POST"])
 def export_txt():
     data=request.get_json(silent=True) if request.method=="POST" else request.args
