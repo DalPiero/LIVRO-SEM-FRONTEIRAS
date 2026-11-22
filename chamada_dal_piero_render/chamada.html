@@ -31,6 +31,7 @@
 <li>Cada participante da plateia seleciona <strong>Eu escuto</strong>, entra na sala, recebe autorização e toca em <strong>Ativar áudio</strong>. Não precisa ligar seu microfone.</li>
 <li>Se desejar, registre o ambiente no <strong>Modo Filme</strong>, após obter consentimento. O vídeo original e a transcrição podem ser salvos separadamente.</li>
 </ol>
+<p class="muted">Para gravar vídeo e transmitir tradução ao mesmo tempo, é preferível usar dois aparelhos: um dedicado à filmagem e outro ao microfone/central de tradução. Alguns navegadores não permitem reconhecimento de voz e gravação simultâneos.</p>
 <p class="muted">A tradução é experimental e pode ter pausas. Esta versão não transmite vídeo remoto ao vivo. Para plateia remota, compartilha textos traduzidos e vozes sintetizadas pelos navegadores; a imagem pode ser gravada localmente no aparelho do palestrante.</p>
 <button id="stageGoFilm" type="button" class="secondary">🎬 Ir para gravar o ambiente</button>
 </div>
@@ -219,17 +220,15 @@ $("stageSpeaker").onclick=()=>{
  $("listen").value=$("stageLanguage").value;
  updateLanguageFeedback();
  $("roomInput").value="DALPIERO";
- updatePermanentControls();
  $("hostMode").checked=true;
- $("hostKeyGroup").classList.remove("hidden");
+ updatePermanentControls();
  $("enter").scrollIntoView({behavior:"smooth",block:"start"});
  $("name").focus({preventScroll:true});
 };
 $("stageAudience").onclick=()=>{
  $("roomInput").value="DALPIERO";
- updatePermanentControls();
  $("hostMode").checked=false;
- $("hostKeyGroup").classList.add("hidden");
+ updatePermanentControls();
  $("stageSetup").classList.add("hidden");
  $("openStage").setAttribute("aria-expanded","false");
  $("languageQuick").scrollIntoView({behavior:"smooth",block:"start"});
@@ -1163,6 +1162,9 @@ if(qr.has("plateia")){
  $("stageHeading").textContent="🎧 Bem-vindo à plateia multilíngue";
  $("openStage").textContent="🎧 Escolha o idioma que deseja ouvir";
  $("stageAudience").textContent="🎧 Selecionar meu idioma e entrar";
+ $("roomInput").value="DALPIERO";
+ $("hostMode").checked=false;
+ updatePermanentControls();
  $("languageQuick").scrollIntoView({block:"start"});
 }
 refreshInstallStatus();
