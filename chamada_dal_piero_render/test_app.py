@@ -12,6 +12,30 @@ class CallTests(unittest.TestCase):
         self.assertEqual(response.status_code,200,response.json)
         return response.json
 
+    def test_pwa_manifest_and_mobile_icons(self):
+        import struct
+        home=self.client.get("/chamada.html")
+        self.assertEqual(home.status_code,200)
+        html=home.get_data(as_text=True)
+        self.assertIn('id="installBtn"',html)
+        self.assertIn('id="installSteps"',html)
+        self.assertIn('max-width:350px',html)
+        self.assertIn('max-width:480px',html)
+        manifest_response=self.client.get("/manifest.webmanifest")
+        self.assertEqual(manifest_response.status_code,200)
+        self.assertIn("application/manifest+json",manifest_response.mimetype)
+        data=manifest_response.get_json()
+        self.assertEqual(data["start_url"],"/chamada.html?s=DALPIERO")
+        self.assertEqual(data["display"],"standalone")
+        self.assertEqual([icon["sizes"] for icon in data["icons"]],["192x192","512x512"])
+        for size in (192,512):
+            response=self.client.get(f"/app-icon-{size}.png")
+            self.assertEqual(response.status_code,200)
+            self.assertEqual(response.mimetype,"image/png")
+            raw=response.data
+            self.assertEqual(raw[:8],b"\\x89PNG\\r\\n\\x1a\\n")
+            self.assertEqual(struct.unpack(">II",raw[16:24]),(size,size))
+
     def test_health(self):
         self.assertTrue(self.client.get("/api/health").json["ok"])
 
