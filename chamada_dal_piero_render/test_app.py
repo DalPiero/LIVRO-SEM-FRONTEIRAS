@@ -21,7 +21,7 @@ class CallTests(unittest.TestCase):
         guest=self.join("Convidado",key)
         self.assertEqual(guest["callState"],"pending")
         self.assertEqual(self.client.post("/api/message",json={"room":key,"pid":guest["pid"],"text":"Antes"}).status_code,403)
-        self.assertEqual(self.client.get("/api/export",query_string={"room":key,"pid":guest["pid"]}).status_code,403)
+        self.assertEqual(self.client.post("/api/export",json={"room":key,"pid":guest["pid"]}).status_code,403)
         self.assertEqual(self.client.post("/api/call-action",json={"room":key,"pid":guest["pid"],"target":host["pid"],"action":"accepted","reply":"ok"}).status_code,403)
         self.assertEqual(self.client.post("/api/message",json={"room":key,"pid":host["pid"],"text":"Private before entry"}).status_code,200)
         self.assertEqual(self.client.post("/api/call-subject",json={"room":key,"pid":guest["pid"],"subject":"Assunto de pesquisa"}).status_code,200)
@@ -38,7 +38,7 @@ class CallTests(unittest.TestCase):
         got=self.client.get("/api/poll",query_string={"room":key,"pid":host["pid"],"since":0}).json["messages"]
         self.assertEqual(got[-1]["text"],"Depois")
         self.assertEqual(got[-1]["pid"],guest["pid"])
-        self.assertNotIn("Private before entry",self.client.get("/api/export",query_string={"room":key,"pid":guest["pid"]}).get_data(as_text=True))
+        self.assertNotIn("Private before entry",self.client.post("/api/export",json={"room":key,"pid":guest["pid"]}).get_data(as_text=True))
         self.assertEqual(self.client.post("/api/call-action",json={**base,"action":"hold","reply":"Aguarde 20 minutos"}).status_code,200)
         self.assertEqual(self.client.post("/api/message",json={"room":key,"pid":guest["pid"],"text":"Bloqueado"}).status_code,403)
 
