@@ -36,6 +36,18 @@ class CallTests(unittest.TestCase):
             self.assertEqual(raw[:8],b"\x89PNG\r\n\x1a\n")
             self.assertEqual(struct.unpack(">II",raw[16:24]),(size,size))
 
+    def test_language_choices_are_easy_to_find_and_unique(self):
+        response=self.client.get("/chamada.html")
+        self.assertEqual(response.status_code,200)
+        page=response.get_data(as_text=True)
+        self.assertEqual(page.count('id="src"'),1)
+        self.assertEqual(page.count('id="listen"'),1)
+        self.assertLess(page.index('id="languageQuick"'),page.index('id="installPanel"'))
+        self.assertLess(page.index('id="languageQuick"'),page.index('id="enter"'))
+        self.assertIn("language-fields",page)
+        self.assertIn("updateLanguageFeedback",page)
+        self.assertIn('state.joined=true;$("src").disabled=true;',page)
+
     def test_health(self):
         self.assertTrue(self.client.get("/api/health").json["ok"])
 
