@@ -61,7 +61,7 @@ def join():
             ROOMS[code]=room
         if len(room["members"])>=24:return failure("Sala cheia.",429)
         pid=secrets.token_urlsafe(24)
-        room["members"][pid]={"name":name,"src":src,"listen":dst,"seen":time.time(),"subject":""}
+        room["members"][pid]={"name":name,"src":src,"listen":dst,"seen":time.time(),"subject":"","acceptedFrom":0}
         if room.get("owner") is None:
             room["owner"]=pid
             room["callStates"][pid]="accepted"
@@ -84,6 +84,8 @@ def call_action():
         if room["owner"]!=d.get("pid"):return failure("Somente quem iniciou a chamada pode responder.",403)
         if target==room["owner"] or target not in room["members"]:
             return failure("Convidado não encontrado.",404)
+        if action=="accepted" and room["callStates"].get(target)!="accepted":
+            room["members"][target]["acceptedFrom"]=room["seq"]
         room["callStates"][target]=action
         room["callReplies"][target]=reply
     return jsonify(ok=True,callState=action,reply=reply)
@@ -128,8 +130,8 @@ def poll():
         pid=str(d["pid"])
         call_state=room["callStates"].get(pid,"pending")
         host=room["owner"]==pid
-        incoming=[{"pid":other,"name":member["name"],"state":room["callStates"].get(other,"pending"),"subject":member.get("subject",""),"reply":room["callReplies"].get(other,"")} for other,member in room["members"].items() if other!=room["owner"] and room["callStates"].get(other) in ("pending","accepted","hold","later") and time.time()-member["seen"]<150] if host else []
-        msgs=([m for m in room["messages"] if m["id"]>since][-50:] if call_state=="accepted" else [])
+        incoming=[{"pid":other,"name":member["name"],"state":room["callStates"].get(other,"pending"),"subject":member.get("subject",""),"reply":room["callReplies"].get(other,"")} for other,member in room["members"].items() if other!=room["owner"] and room["callStates"].get(other) in ("pending","accepted","rejected","hold","later") and time.time()-member["seen"]<150] if host else []
+        msgs=([m for m in room["messages"] if m["id"]>max(since,room["members"][pid].get("acceptedFrom",0))][-50:] if call_state=="accepted" else [])
         online=sum(time.time()-v["seen"]<45 and room["callStates"].get(k)=="accepted" for k,v in room["members"].items())
     return jsonify(messages=msgs,online=online,callState=call_state,callReply=room["callReplies"].get(pid,""),incoming=incoming,host=host)
 @app.post("/api/translate")
@@ -157,7 +159,11 @@ def export_txt():
     with LOCK:
         room=access(request.args)
         if not room:return failure("Acesso inválido.",403)
-        rows=list(room["messages"])
+        pid=request.args.get("pid","")
+        if room["callStates"].get(pid)!="accepted":
+            return failure("Transcrição disponível apenas para participantes autorizados.",403)
+        since=room["members"][pid].get("acceptedFrom",0)
+        rows=[m for m in room["messages"] if m["id"]>since]
     text="\n".join(time.strftime("%Y-%m-%d %H:%M:%S",time.gmtime(m["ts"]))+" UTC | "+m["name"]+": "+m["text"] for m in rows)
     from flask import Response
     return Response(text,mimetype="text/plain",headers={"Content-Disposition":"attachment; filename=chamada-dal-piero.txt"})
