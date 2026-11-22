@@ -103,6 +103,40 @@ class CallTests(unittest.TestCase):
             self.assertEqual(len(got["messages"]),5)
             self.assertEqual([x["src"] for x in got["messages"]],[x[0] for x in chosen])
 
+    def test_film_dubbing_ui_and_russian_translation_support(self):
+        markup=self.client.get("/chamada.html").get_data(as_text=True)
+        for element in ("filmDubPanel","filmDubLanguage","filmDubMix","filmDubCreate","filmDubSave",
+                        "filmDubStop","filmDubStatus","filmDubPreview"):
+            self.assertEqual(markup.count('id="'+element+'"'),1,element)
+        self.assertIn("canvas.captureStream(20)",markup)
+        self.assertIn("createMediaStreamDestination",markup)
+        self.assertIn('"/api/film-voice"',markup)
+        self.assertIn('"ru":"Russo"',markup)
+        self.assertIn('option value="ru"',markup)
+        self.assertEqual(self.client.post("/api/translate",json={"text":"Привет", "src":"ru", "to":"ru"}).json["text"],"Привет")
+
+    def test_film_voice_validation_and_short_synthesized_mp3(self):
+        import sys
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        from server import TTS_TIMES
+        TTS_TIMES.clear()
+        self.assertEqual(self.client.post("/api/film-voice",json={"text":"","language":"pt"}).status_code,400)
+        self.assertEqual(self.client.post("/api/film-voice",json={"text":"Bom dia","language":"xx"}).status_code,400)
+        self.assertEqual(self.client.post("/api/film-voice",json={"text":"x"*251,"language":"pt"}).status_code,400)
+        calls=[]
+        class DummySpeech:
+            def __init__(self,text,voice):calls.append((text,voice))
+            async def stream(self):
+                yield {"type":"audio","data":b"ID3-synth-audio"}
+        with patch.dict(sys.modules,{"edge_tts":SimpleNamespace(Communicate=DummySpeech)}):
+            answer=self.client.post("/api/film-voice",json={"text":"Hello","language":"en"})
+            self.assertEqual(answer.status_code,200,answer.get_data(as_text=True))
+            self.assertEqual(answer.mimetype,"audio/mpeg")
+            self.assertEqual(answer.data,b"ID3-synth-audio")
+            self.assertEqual(calls,[("Hello","en-US-AriaNeural")])
+        TTS_TIMES.clear()
+
     def test_health(self):
         self.assertTrue(self.client.get("/api/health").json["ok"])
 
