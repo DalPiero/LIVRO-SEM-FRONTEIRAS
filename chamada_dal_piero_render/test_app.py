@@ -33,7 +33,7 @@ class CallTests(unittest.TestCase):
             self.assertEqual(response.status_code,200)
             self.assertEqual(response.mimetype,"image/png")
             raw=response.data
-            self.assertEqual(raw[:8],b"\\x89PNG\\r\\n\\x1a\\n")
+            self.assertEqual(raw[:8],b"\x89PNG\r\n\x1a\n")
             self.assertEqual(struct.unpack(">II",raw[16:24]),(size,size))
 
     def test_health(self):
