@@ -154,12 +154,14 @@ def translate():
         return jsonify(text=translated,engine="MyMemory; tradução experimental")
     except Exception:
         return failure("O serviço de tradução está indisponível. Tente novamente.",503)
-@app.get("/api/export")
+@app.route("/api/export",methods=["GET","POST"])
 def export_txt():
+    data=request.get_json(silent=True) if request.method=="POST" else request.args
+    if data is None:data={}
     with LOCK:
-        room=access(request.args)
+        room=access(data)
         if not room:return failure("Acesso inválido.",403)
-        pid=request.args.get("pid","")
+        pid=data.get("pid","")
         if room["callStates"].get(pid)!="accepted":
             return failure("Transcrição disponível apenas para participantes autorizados.",403)
         since=room["members"][pid].get("acceptedFrom",0)
