@@ -46,7 +46,7 @@ class CallTests(unittest.TestCase):
         self.assertLess(page.index('id="languageQuick"'),page.index('id="enter"'))
         self.assertIn("language-fields",page)
         self.assertIn("updateLanguageFeedback",page)
-        self.assertIn('state.joined=true;setupLiveRole();$("src").disabled=true;',page)
+        self.assertIn('state.joined=true;$("src").disabled=true;state.host=d.role==="host";state.callState=d.callState;setupLiveRole();',page)
 
     def test_presential_recording_and_voice_controls(self):
         page=self.client.get("/chamada.html")
