@@ -102,6 +102,33 @@ class CallTests(unittest.TestCase):
             got=self.client.get("/api/poll",query_string={"room":"DALPIERO","pid":hp,"since":0}).json
             self.assertEqual(len(got["messages"]),5)
             self.assertEqual([x["src"] for x in got["messages"]],[x[0] for x in chosen])
+            self.assertEqual(len(got["participants"]),6)
+            self.assertEqual(got["participants"][0]["speak"],"pt")
+            self.assertEqual(got["participants"][0]["listen"],"pt")
+            self.assertTrue(got["participants"][0]["host"])
+            self.assertEqual([(x["speak"],x["listen"]) for x in got["participants"][1:]],chosen)
+            self.assertFalse(any("pid" in x for x in got["participants"]))
+            # Pending guests must not obtain the accepted participant directory.
+            pending=self.client.post("/api/join",json={"name":"Ainda aguardando","room":"DALPIERO",
+                "src":"en","listen":"pt","consent":True}).json
+            limited=self.client.get("/api/poll",query_string={"room":"DALPIERO","pid":pending["pid"]}).json
+            self.assertEqual(limited["participants"],[])
+
+    def test_audit_panel_and_cue_editor_controls(self):
+        page=self.client.get("/chamada.html").get_data(as_text=True)
+        for element in ("validationPanel","auditBrowser","auditTranslations","auditVoice","auditDownload",
+                        "auditResult","filmCueEditor","filmCueStart","filmCueEnd","filmCueText",
+                        "filmCueIndex","filmCueSpeaker","filmCueSave","filmCueCancel","filmCueEditMessage",
+                        "meetingRoster"):
+            self.assertEqual(page.count('id="'+element+'"'),1,element)
+        self.assertIn("function renderMeetingRoster",page)
+        self.assertIn("function openCueEditor",page)
+        self.assertIn("function capabilityTable",page)
+        self.assertIn("writeAudit",page)
+        self.assertIn("function cueTime",page)
+        self.assertIn("dubState.voiceAbort",page)
+        self.assertIn("const available=Math.max(0.15",page)
+        self.assertIn("node.playbackRate.value=rate",page)
 
     def test_dub_create_button_clickable_and_local_import(self):
         page=self.client.get("/chamada.html").get_data(as_text=True)
