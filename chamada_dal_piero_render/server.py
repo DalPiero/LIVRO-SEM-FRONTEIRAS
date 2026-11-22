@@ -115,7 +115,7 @@ def message():
         member=room["members"][pid]
         if room["callStates"].get(pid)!="accepted":return failure("A chamada ainda não foi aceita ou está em espera.",403)
         room["seq"]+=1
-        item={"id":room["seq"],"text":text,"src":member["src"],"name":member["name"],"ts":int(time.time())}
+        item={"id":room["seq"],"pid":pid,"text":text,"src":member["src"],"name":member["name"],"ts":int(time.time())}
         room["messages"].append(item)
         room["messages"]=room["messages"][-160:]
     return jsonify(ok=True,id=item["id"])
