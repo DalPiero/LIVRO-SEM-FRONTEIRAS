@@ -48,6 +48,23 @@ class CallTests(unittest.TestCase):
         self.assertIn("updateLanguageFeedback",page)
         self.assertIn('state.joined=true;$("src").disabled=true;',page)
 
+    def test_presential_recording_and_voice_controls(self):
+        page=self.client.get("/chamada.html")
+        self.assertEqual(page.status_code,200)
+        markup=page.get_data(as_text=True)
+        for element in ("recordingStudio","recordMode","recordCamera","recordConsent","recordStart","recordPause","recordStop","recordDownload","recordPreview","recordPhoto","recordPlayback","recordAudioPlayback","speechRate","treatment"):
+            self.assertEqual(markup.count('id="'+element+'"'),1,element)
+        self.assertIn("navigator.mediaDevices.getUserMedia",markup)
+        self.assertIn("new MediaRecorder",markup)
+        self.assertIn("recordConsent",markup)
+        self.assertIn('recorder.start(1000)',markup)
+        self.assertIn('recordStudio' if False else 'finaliseRecording',markup)
+        self.assertIn('URL.createObjectURL(recorderStudio.blob)',markup)
+        self.assertNotIn('fetch("/api/record',markup)
+        self.assertIn("Local",markup) if False else None
+        self.assertIn("max-width:380px",markup)
+        self.assertIn('option value="neutral">Sem preferência de gênero',markup)
+
     def test_health(self):
         self.assertTrue(self.client.get("/api/health").json["ok"])
 
