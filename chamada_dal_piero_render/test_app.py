@@ -70,6 +70,40 @@ class CallTests(unittest.TestCase):
             self.assertEqual(old_poll["callState"],"later")
             self.assertEqual(self.client.post("/api/call-action",json={"room":"DALPIERO","pid":o["pid"],"target":g["pid"],"action":"rejected","reply":"Nao"}).status_code,403)
 
+    def test_greeting_by_country_header_and_fallback(self):
+        from unittest.mock import patch
+        from server import public_client_ip
+        with patch("server.urlopen") as blocked:
+            response=self.client.get("/api/greeting-language",headers={"CF-IPCountry":"BR"})
+            self.assertEqual(response.status_code,200)
+            self.assertEqual(response.json["language"],"pt")
+            self.assertEqual(response.json["source"],"ip")
+            blocked.assert_not_called()
+        response=self.client.get("/api/greeting-language",headers={"CF-IPCountry":"ES"})
+        self.assertEqual(response.json["language"],"es")
+        response=self.client.get("/api/greeting-language",headers={"CF-IPCountry":"FR"})
+        self.assertEqual(response.json["language"],"fr")
+        response=self.client.get("/api/greeting-language",headers={"CF-IPCountry":"ZZ"})
+        self.assertEqual(response.json["language"],"en")
+        with patch("server.public_client_ip",return_value=None):
+            response=self.client.get("/api/greeting-language")
+            self.assertEqual(response.status_code,200)
+            self.assertIsNone(response.json["language"])
+            self.assertEqual(response.json["source"],"browser")
+
+    def test_greeting_ip_lookup_when_country_header_unavailable(self):
+        from unittest.mock import patch
+        from io import BytesIO
+        payload=BytesIO(b'{"success":true,"country_code":"AR"}')
+        class MockResponse:
+            def __enter__(self):return payload
+            def __exit__(self,*args):return False
+        with patch("server.public_client_ip",return_value="8.8.8.8"), patch("server.urlopen",return_value=MockResponse()) as lookup:
+            response=self.client.get("/api/greeting-language")
+            self.assertEqual(response.json["language"],"es")
+            self.assertEqual(response.json["country"],"AR")
+            lookup.assert_called_once()
+
     def test_invalid_requests(self):
         self.assertEqual(self.client.post("/api/join",json={"name":"Anon","consent":False}).status_code,400)
         self.assertEqual(self.client.post("/api/join",json={"name":"Anon","room":"BAD","consent":True}).status_code,404)
