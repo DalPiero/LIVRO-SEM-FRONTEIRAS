@@ -65,6 +65,44 @@ class CallTests(unittest.TestCase):
         self.assertIn("max-width:380px",markup)
         self.assertIn('option value="neutral">Sem preferência de gênero',markup)
 
+    def test_meeting_and_film_modes_are_accessible(self):
+        page=self.client.get("/chamada.html").get_data(as_text=True)
+        for element in ("modeSelector","meetingMode","filmMode","meetingGuide","meetingCopyInvite","meetingGo",
+                        "filmCaptionPanel","filmSourceLanguage","filmCaptionLanguage","filmSpeaker",
+                        "filmCaptionText","filmAddCaption","filmStartRecognition","filmStopRecognition",
+                        "filmTranslateCaptions","filmSaveSrt","filmSaveVtt","filmSaveTxt","filmPreviewCaptions",
+                        "filmCaptionStatus","filmCaptionList"):
+            self.assertEqual(page.count('id="'+element+'"'),1,element)
+        self.assertIn("WEBVTT",page)
+        self.assertIn('cueTime(cue.start*1000,srt)',page)
+        self.assertIn('recorderStudio.cues',page)
+        self.assertIn("api(\"/api/translate\"",page)
+        self.assertIn("stopFilmRecognition()",page)
+        self.assertIn("navigator.mediaDevices.getUserMedia",page)
+        self.assertIn("Cada pessoa escuta em seu idioma",page)
+
+    def test_six_meeting_participants_keep_independent_languages(self):
+        from unittest.mock import patch
+        with patch.dict("os.environ",{"DALPIERO_HOST_KEY":"MeetingTestKey"},clear=False):
+            host=self.client.post("/api/join",json={"name":"Professor","room":"DALPIERO","role":"host",
+                "hostKey":"MeetingTestKey","src":"pt","listen":"pt","consent":True})
+            self.assertEqual(host.status_code,200,host.json)
+            hp=host.json["pid"]
+            chosen=[("it","it"),("es","es"),("en","en"),("de","de"),("zh-CN","zh-CN")]
+            for i,(src,dst) in enumerate(chosen):
+                guest=self.client.post("/api/join",json={"name":"Pessoa "+str(i),"room":"DALPIERO",
+                    "src":src,"listen":dst,"consent":True})
+                self.assertEqual(guest.status_code,200,guest.json)
+                pid=guest.json["pid"]
+                accepted=self.client.post("/api/call-action",json={"room":"DALPIERO","pid":hp,"target":pid,
+                    "action":"accepted","reply":"Bem-vindo"})
+                self.assertEqual(accepted.status_code,200,accepted.json)
+                statement=self.client.post("/api/message",json={"room":"DALPIERO","pid":pid,"text":"Olá "+src})
+                self.assertEqual(statement.status_code,200,statement.json)
+            got=self.client.get("/api/poll",query_string={"room":"DALPIERO","pid":hp,"since":0}).json
+            self.assertEqual(len(got["messages"]),5)
+            self.assertEqual([x["src"] for x in got["messages"]],[x[0] for x in chosen])
+
     def test_health(self):
         self.assertTrue(self.client.get("/api/health").json["ok"])
 
