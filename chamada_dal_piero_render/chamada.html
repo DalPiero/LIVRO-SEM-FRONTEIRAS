@@ -39,7 +39,7 @@ const GREETINGS={
  "sw":["Karibu kwenye Chamada Traduzida Dal Piero!","Unaweza kuchagua lugha nyingine katika sehemu za 'Ninazungumza' na 'Ninasikiliza' kabla ya kuomba simu."]
 };
 let greetingLang="pt",greetingUserChanged=false;
-$("src").addEventListener("change",()=>{greetingUserChanged=true;});
+$("src").addEventListener("change",()=>{greetingUserChanged=true;renderGreeting($("src").value,"manual");});
 $("listen").addEventListener("change",()=>{greetingUserChanged=true;});
 function renderGreeting(language,source){
  const key=Object.prototype.hasOwnProperty.call(GREETINGS,language)?language:"en";
@@ -47,7 +47,7 @@ function renderGreeting(language,source){
  greetingLang=key;
  $("welcomeTitle").textContent=lines[0];$("welcomeText").textContent=lines[1];
  $("welcome").lang=key;
- $("welcomeSource").textContent=source==="ip"?"Idioma inicial sugerido pelo país estimado do IP. Você pode alterá-lo.":"Idioma inicial sugerido pelo navegador. Você pode alterá-lo.";
+ $("welcomeSource").textContent=source==="manual"?"Idioma escolhido por você.":"Idioma inicial sugerido "+(source==="ip"?"pelo país estimado do IP.":"pelo navegador.")+" Você pode alterá-lo.";
  if(!greetingUserChanged && Object.prototype.hasOwnProperty.call(LANGS,key)){
    $("src").value=key;$("listen").value=key;
  }
