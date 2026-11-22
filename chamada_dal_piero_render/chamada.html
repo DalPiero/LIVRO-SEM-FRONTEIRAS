@@ -809,7 +809,7 @@ $("filmPreviewCaptions").onclick=()=>{
  $("filmCaptionStatus").textContent="Legendas ativadas na prévia quando o navegador oferecer suporte. O vídeo salvo continua original; baixe também SRT/VTT.";
 };
 
-const dubState={busy:false,cancelled:false,url:null,blob:null,mime:"",recorder:null,source:null,ctx:null,raf:0,canvas:null};
+const dubState={busy:false,cancelled:false,url:null,blob:null,mime:"",recorder:null,source:null,ctx:null,raf:0,canvas:null,voiceAbort:null};
 function dubStatus(message){$("filmDubStatus").textContent=message;}
 function clearDubOutput(){
  if(dubState.url)URL.revokeObjectURL(dubState.url);
@@ -836,12 +836,13 @@ async function dubAudioForCue(cue,lang,context){
   }
  }
  if(cue.translated.length>250)throw Error("Um trecho traduzido excede 250 caracteres. Divida a legenda em partes menores.");
- const response=await fetch("/api/film-voice",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:cue.translated,language:lang}),cache:"no-store"});
+ const response=await fetch("/api/film-voice",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:cue.translated,language:lang}),cache:"no-store",signal:dubState.voiceAbort?.signal});
  if(!response.ok){let d={};try{d=await response.json();}catch{}throw Error(d.error||"Serviço de voz indisponível.");}
  const bytes=await response.arrayBuffer();
  return await context.decodeAudioData(bytes);
 }
 function dubStopResources(){
+ if(dubState.voiceAbort){dubState.voiceAbort.abort();dubState.voiceAbort=null;}
  if(dubState.recorder && dubState.recorder.state!=="inactive")try{dubState.recorder.stop()}catch{}
  if(dubState.source){dubState.source.pause();dubState.source.removeAttribute("src");dubState.source.load();dubState.source.remove();dubState.source=null;}
  if(dubState.raf)cancelAnimationFrame(dubState.raf);
@@ -871,7 +872,7 @@ $("filmDubCreate").onclick=async()=>{
  }
  const mime=supportedDubFormat();
  if(!mime)return dubStatus("Seu navegador não aceita nenhum formato de gravação de filme dublado.");
- dubState.cancelled=false;clearDubOutput();dubButtons(true);
+ dubState.cancelled=false;dubState.voiceAbort=new AbortController();clearDubOutput();dubButtons(true);
  try{
   const ctx=new (window.AudioContext||window.webkitAudioContext)();dubState.ctx=ctx;await ctx.resume();
   const lang=$("filmDubLanguage").value;
@@ -888,6 +889,7 @@ $("filmDubCreate").onclick=async()=>{
   video.preload="auto";video.src=recorderStudio.url;video.style.display="none";document.body.append(video);dubState.source=video;
   await new Promise((resolve,reject)=>{if(video.readyState>=1)return resolve();video.onloadedmetadata=resolve;video.onerror=()=>reject(Error("Não foi possível abrir o vídeo original."));});
   if(!Number.isFinite(video.duration)||video.duration>610||video.duration<=0)throw Error("Duração não suportada. Use gravações de até 10 minutos.");
+  if(cues.some(c=>c.start>=video.duration))throw Error("Há legendas iniciadas após o fim do vídeo. Corrija os horários antes da dublagem.");
   const canvas=document.createElement("canvas");canvas.width=Math.min(video.videoWidth||1280,1280);canvas.height=Math.max(1,Math.round(canvas.width*(video.videoHeight||720)/(video.videoWidth||1280)));dubState.canvas=canvas;
   const graphics=canvas.getContext("2d");if(!graphics)throw Error("Canvas indisponível.");
   const videoStream=canvas.captureStream(20);const dest=ctx.createMediaStreamDestination();
@@ -913,12 +915,28 @@ $("filmDubCreate").onclick=async()=>{
   const ended=new Promise((resolve,reject)=>{video.onended=resolve;video.onerror=()=>reject(Error("Falha na reprodução do vídeo original."));});
   try{await video.play();}catch{throw Error("O navegador bloqueou a reprodução. Toque novamente no botão ou teste no Chrome/Edge.");}
   const sync=ctx.currentTime-video.currentTime;
-  for(const item of clips){
-   const node=ctx.createBufferSource(),amp=ctx.createGain();amp.gain.value=0.95;
-   node.buffer=item.buffer;node.connect(amp);amp.connect(dest);
-   node.start(Math.max(ctx.currentTime+0.02,sync+item.cue.start));
+  let adapted=0;
+  for(let i=0;i<clips.length;i++){
+   const item=clips[i],next=clips[i+1]?.cue;
+   const node=ctx.createBufferSource(),amp=ctx.createGain();
+   const scheduled=Math.max(ctx.currentTime+0.03,sync+item.cue.start);
+   const remaining=video.duration-item.cue.start;
+   const nextGap=next?next.start-item.cue.start-0.08:remaining;
+   const available=Math.max(0.15,Math.min(remaining,item.cue.end-item.cue.start,nextGap));
+   const rate=Math.max(1,Math.min(1.6,item.buffer.duration/available));
+   const playbackSeconds=Math.min(available,item.buffer.duration/rate);
+   if(playbackSeconds<0.15)continue;
+   if(rate>1.01)adapted++;
+   node.buffer=item.buffer;node.playbackRate.value=rate;node.connect(amp);amp.connect(dest);
+   const fade=Math.min(0.05,playbackSeconds/5);
+   amp.gain.setValueAtTime(0,scheduled);
+   amp.gain.linearRampToValueAtTime(0.95,scheduled+fade);
+   amp.gain.setValueAtTime(0.95,scheduled+playbackSeconds-fade);
+   amp.gain.linearRampToValueAtTime(0,scheduled+playbackSeconds);
+   node.start(scheduled);
+   node.stop(scheduled+playbackSeconds);
   }
-  dubStatus("🔴 Gerando novo filme em tempo real. Mantenha esta aba aberta até a conclusão. "+Math.ceil(video.duration)+" segundos de vídeo.");
+  dubStatus("🔴 Gerando filme em tempo real. "+adapted+" trecho(s) com velocidade ajustada para caber na janela marcada. Mantenha esta aba aberta por aproximadamente "+Math.ceil(video.duration)+" segundos.");
   await ended;
   if(dubState.cancelled)throw Error("Cancelado");
   await new Promise(resolve=>setTimeout(resolve,250));
@@ -929,7 +947,7 @@ $("filmDubCreate").onclick=async()=>{
   dubState.url=URL.createObjectURL(blob);
   $("filmDubPreview").src=dubState.url;$("filmDubPreview").classList.remove("hidden");
   $("filmDubSave").disabled=false;
-  dubStatus("✅ Filme com áudio traduzido criado: "+(blob.size/1048576).toFixed(1)+" MB. Ouça a prévia e clique em Salvar filme dublado. A voz é sintética e pode divergir da fala original.");
+  dubStatus("✅ Filme dublado criado: "+(blob.size/1048576).toFixed(1)+" MB. "+adapted+" trecho(s) acelerado(s) para melhorar o encaixe. Confira áudio, imagem e sincronismo antes de salvar. Voz sintética, diferente da voz original.");
  }catch(e){dubStatus("⚠️ "+(e.message||"Falha na dublagem.")+" O vídeo original e as legendas permanecem disponíveis.");}
  finally{dubStopResources();dubButtons(false);}
 };
