@@ -175,6 +175,20 @@ class CallTests(unittest.TestCase):
             self.assertEqual(calls,[("Hello","en-US-AriaNeural")])
         TTS_TIMES.clear()
 
+    def test_presentation_mode_visible_and_host_audience_paths(self):
+        markup=self.client.get("/chamada.html?s=DALPIERO&plateia=1").get_data(as_text=True)
+        for name in ("stageTop","stageHeading","openStage","stageSetup","stageFormat",
+                     "stageLanguage","stageSpeaker","stageAudience","stageInviteUrl",
+                     "stageCopy","stageWhatsApp","stageGoFilm","stageFormatHelp"):
+            self.assertEqual(markup.count('id="'+name+'"'),1,name)
+        self.assertLess(markup.index('id="stageTop"'),markup.index('id="modeSelector"'))
+        self.assertIn("FILMAR E TRADUZIR PARA A PLATEIA",markup)
+        self.assertIn("stageInvitation()",markup)
+        self.assertIn("plateia=1",markup)
+        self.assertIn("Esta versão não transmite vídeo remoto ao vivo",markup)
+        self.assertIn('if(qr.has("plateia"))',markup)
+        self.assertIn(' $("hostMode").checked=true;\n updatePermanentControls();',markup)
+
     def test_health(self):
         self.assertTrue(self.client.get("/api/health").json["ok"])
 
