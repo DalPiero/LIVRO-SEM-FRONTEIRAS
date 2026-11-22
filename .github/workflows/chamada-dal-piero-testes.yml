@@ -29,3 +29,15 @@ jobs:
           assert 'submit' not in page.lower() or True
           print('Required controls found')
           PY
+      - name: Parse actual browser JavaScript with Node
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          page=Path('chamada_dal_piero_render/chamada.html').read_text()
+          assert page.count('<script>')==1 and page.count('</script>')==1
+          code=page.split('<script>',1)[1].split('</script>',1)[0]
+          Path('/tmp/chamada-dal-piero-browser.js').write_text(code)
+          print(f'Checking {len(code)} browser JS characters')
+          PY
+          node --check /tmp/chamada-dal-piero-browser.js
+
