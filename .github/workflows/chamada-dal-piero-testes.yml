@@ -29,6 +29,54 @@ jobs:
           assert 'submit' not in page.lower() or True
           print('Required controls found')
           PY
+      - name: Smoke test browser interface in headless Chrome
+        run: |
+          python -m pip install 'selenium>=4.25,<5'
+          PORT=18765 python chamada_dal_piero_render/server.py >/tmp/dalpiero-flask.log 2>&1 &
+          python - <<'PY'
+          import time
+          from urllib.request import urlopen
+          for i in range(40):
+              try:
+                  with urlopen('http://127.0.0.1:18765/chamada.html',timeout=2) as resp:
+                      if resp.status == 200:break
+              except Exception:
+                  time.sleep(.25)
+          else:
+              raise RuntimeError('Local Flask service did not start')
+          from selenium import webdriver
+          from selenium.webdriver.common.by import By
+          from selenium.webdriver.chrome.options import Options
+          options=Options()
+          options.add_argument('--headless=new')
+          options.add_argument('--no-sandbox')
+          options.add_argument('--disable-dev-shm-usage')
+          options.add_argument('--autoplay-policy=no-user-gesture-required')
+          driver=webdriver.Chrome(options=options)
+          try:
+              for width,height in ((1280,900),(390,844),(320,700)):
+                  driver.set_window_size(width,height)
+                  driver.get('http://127.0.0.1:18765/chamada.html?s=DALPIERO')
+                  driver.find_element(By.ID,'modeSelector')
+                  driver.find_element(By.ID,'meetingGuide')
+                  driver.find_element(By.ID,'validationPanel')
+                  dub=driver.find_element(By.ID,'filmDubCreate')
+                  assert dub.is_enabled(), f'Dub create disabled at {width}px'
+                  driver.execute_script("arguments[0].click()",dub)
+                  assert 'Primeiro grave' in driver.find_element(By.ID,'filmDubStatus').text
+                  audit=driver.find_element(By.ID,'auditBrowser')
+                  driver.execute_script("arguments[0].click()",audit)
+                  assert 'MediaRecorder' in driver.find_element(By.ID,'auditResult').text
+                  speaking=driver.find_element(By.ID,'src')
+                  listening=driver.find_element(By.ID,'listen')
+                  assert speaking.is_displayed() and listening.is_displayed()
+                  viewport=driver.execute_script('return document.documentElement.scrollWidth-window.innerWidth')
+                  assert viewport<=8,f'Horizontal overflow {viewport}px at {width}px'
+                  print('PASS headless Chrome width',width)
+              print('PASS: mode controls, responsive widths, dubbing prerequisite, browser diagnostics')
+          finally:
+              driver.quit()
+          PY
       - name: Parse actual browser JavaScript with Node
         run: |
           python - <<'PY'
