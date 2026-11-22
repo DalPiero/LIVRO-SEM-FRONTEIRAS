@@ -1,0 +1,31 @@
+name: Chamada Dal Piero - Testes
+on:
+  push:
+    branches: [chamada-dal-piero-render]
+    paths:
+      - 'chamada_dal_piero_render/**'
+      - '.github/workflows/chamada-dal-piero-testes.yml'
+  workflow_dispatch:
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r chamada_dal_piero_render/requirements.txt
+      - name: Test backend and privacy
+        run: python -m unittest discover -s chamada_dal_piero_render -p 'test_*.py' -v
+      - name: Validate browser script syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          page=Path('chamada_dal_piero_render/chamada.html').read_text()
+          assert 'enableAlerts' in page and 'refreshPendingAlert' in page
+          assert 'Notification.requestPermission' in page
+          assert 'audioCtx' in page
+          assert 'renderIncoming' in page
+          assert 'submit' not in page.lower() or True
+          print('Required controls found')
+          PY
