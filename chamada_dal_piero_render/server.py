@@ -13,6 +13,25 @@ LANG={"pt","es","en","it","de","ru","zh-CN","zh-TW"}
 MAX_ROOMS=300
 PERMANENT_CODE="DALPIERO"
 HOST_KEY_ENV="DALPIERO_HOST_KEY"
+# Counters are aggregate and in memory. A free Render instance does not guarantee durable storage.
+ACCESS_CHOICES=("financeira","educacional","digital","linguistica","social","reservada","teste","pagar")
+ACCESS_COUNTS={key:0 for key in ACCESS_CHOICES}
+ACCESS_COUNTS_STARTED=time.time()
+@app.post("/api/access-choice")
+def count_access_choice():
+    payload=request.get_json(silent=True)
+    choice=payload.get("choice") if isinstance(payload,dict) else None
+    if choice not in ACCESS_COUNTS:
+        return failure("Opção inválida.",400)
+    with LOCK:
+        ACCESS_COUNTS[choice]+=1
+    return jsonify(ok=True)
+@app.get("/api/access-stats")
+def access_statistics():
+    with LOCK:
+        counts=dict(ACCESS_COUNTS)
+    return jsonify(counts=counts,from_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime(ACCESS_COUNTS_STARTED)),persistence="memory",notice="Totais agregados desde a última reinicialização do serviço. Não são contagens de pessoas únicas.",cache_control="no-store")
+
 def clean():
     now=time.time()
     for key in list(ROOMS):
