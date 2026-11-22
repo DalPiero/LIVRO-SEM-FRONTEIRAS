@@ -233,7 +233,8 @@ def poll():
         incoming=[{"pid":other,"name":member["name"],"state":room["callStates"].get(other,"pending"),"subject":member.get("subject",""),"reply":room["callReplies"].get(other,"")} for other,member in room["members"].items() if other!=room["owner"] and room["callStates"].get(other) in ("pending","accepted","rejected","hold","later") and time.time()-member["seen"]<150] if host else []
         msgs=([m for m in room["messages"] if m["id"]>max(since,room["members"][pid].get("acceptedFrom",0))][-50:] if call_state=="accepted" else [])
         online=sum(time.time()-v["seen"]<45 and room["callStates"].get(k)=="accepted" for k,v in room["members"].items())
-    return jsonify(messages=msgs,online=online,callState=call_state,callReply=room["callReplies"].get(pid,""),incoming=incoming,host=host)
+        participants=([{"name":v["name"],"speak":v["src"],"listen":v["listen"],"online":time.time()-v["seen"]<45,"host":k==room["owner"]} for k,v in room["members"].items() if room["callStates"].get(k)=="accepted" and time.time()-v["seen"]<180] if call_state=="accepted" else [])
+    return jsonify(messages=msgs,online=online,participants=participants,callState=call_state,callReply=room["callReplies"].get(pid,""),incoming=incoming,host=host)
 @app.post("/api/translate")
 def translate():
     d=request.get_json(silent=True) or {}
