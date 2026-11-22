@@ -430,7 +430,7 @@ $("installBtn").onclick=async()=>{
  installStatus.textContent="Siga as instruções para "+(platformName()==="ios"?"iOS":platformName()==="android"?"Android":"PC")+".";
 };
 // Presential recorder: capture and save locally. Never send media to the app server.
-const recorderStudio={stream:null,recorder:null,chunks:[],blob:null,url:null,mime:"",extension:"",mode:"video",started:0,pausedAt:0,pausedDuration:0,tick:null,maxTimer:null,finishing:false};
+const recorderStudio={stream:null,recorder:null,chunks:[],blob:null,url:null,mime:"",extension:"",mode:"video",started:0,pausedAt:0,pausedDuration:0,tick:null,maxTimer:null,finishing:false,cues:[],captionRecognition:null,captionListening:false,vttUrl:null};
 function recordStatus(message,active=false){
  $("recordIndicator").textContent=message;
  $("recordIndicator").classList.toggle("recording",active);
@@ -444,6 +444,10 @@ function recordControls(active,paused=false){
  $("recordCamera").disabled=active;
  $("recordConsent").disabled=active;
  $("recordPhoto").disabled=!active||recorderStudio.mode!=="video";
+ $("filmAddCaption").disabled=!active&&!(recorderStudio.blob&&recorderStudio.blob.size>0);
+ $("filmStartRecognition").disabled=!active||paused||recorderStudio.captionListening;
+ $("filmStopRecognition").disabled=!recorderStudio.captionListening;
+ $("filmSourceLanguage").disabled=recorderStudio.captionListening;
 }
 function recordElapsed(){
  const elapsed=Math.max(0,Math.floor((Date.now()-recorderStudio.started-recorderStudio.pausedDuration-(recorderStudio.pausedAt?Date.now()-recorderStudio.pausedAt:0))/1000));
@@ -472,6 +476,13 @@ function clearPreviousRecording(){
  $("recordPlayback").classList.add("hidden");
  $("recordAudioPlayback").classList.add("hidden");
  $("recordDownload").disabled=true;
+ stopFilmRecognition();
+ recorderStudio.cues=[];
+ if(recorderStudio.vttUrl)URL.revokeObjectURL(recorderStudio.vttUrl);
+ recorderStudio.vttUrl=null;
+ const oldTrack=$("recordPlayback").querySelector("track[data-generated]");
+ if(oldTrack)oldTrack.remove();
+ renderFilmCues();
 }
 function finaliseRecording(){
  clearMediaTracks();recordControls(false);
@@ -484,6 +495,10 @@ function finaliseRecording(){
  $("recordResult").classList.remove("hidden");
  $("recordResultInfo").textContent="Arquivo local pronto: "+(recorderStudio.blob.size/1048576).toFixed(1)+" MB. Salve antes de sair da página.";
  $("recordDownload").disabled=false;
+ $("filmAddCaption").disabled=false;
+ $("filmStartRecognition").disabled=true;
+ stopFilmRecognition();
+ updateCaptionButtons();
  recordStatus("✅ Gravação finalizada. Toque em Salvar gravação no aparelho.");
 }
 async function beginPresentialRecording(){
@@ -512,6 +527,7 @@ async function beginPresentialRecording(){
    recorder.onstop=finaliseRecording;
    recorder.start(1000);
    recordControls(true);
+   $("filmCaptionStatus").textContent="Gravação iniciada: marque frases para criar legendas com horário. O reconhecimento automático é opcional e experimental.";
    recordStatus("🔴 GRAVANDO • 00:00 • captura local com consentimento",true);
    recorderStudio.tick=setInterval(()=>{if(recorder.state!=="inactive")recordStatus((recorder.state==="paused"?"⏸ PAUSADO":"🔴 GRAVANDO")+" • "+recordElapsed()+" • arquivo local",recorder.state==="recording");},1000);
    recorderStudio.maxTimer=setTimeout(()=>{recordStatus("Limite de 10 minutos atingido. Finalizando para salvar...");stopPresentialRecording();},10*60*1000);
@@ -524,7 +540,7 @@ async function beginPresentialRecording(){
 function pausePresentialRecording(){
  const r=recorderStudio.recorder;if(!r)return;
  try{
-   if(r.state==="recording"){r.pause();recorderStudio.pausedAt=Date.now();recordControls(true,true);recordStatus("⏸ PAUSADO • "+recordElapsed());}
+   if(r.state==="recording"){r.pause();recorderStudio.pausedAt=Date.now();stopFilmRecognition();recordControls(true,true);recordStatus("⏸ PAUSADO • "+recordElapsed());}
    else if(r.state==="paused"){r.resume();recorderStudio.pausedDuration+=Date.now()-recorderStudio.pausedAt;recorderStudio.pausedAt=0;recordControls(true,false);recordStatus("🔴 GRAVANDO • "+recordElapsed(),true);}
  }catch(e){recordStatus("❌ Pausa: "+e.message);}
 }
@@ -533,6 +549,7 @@ function stopPresentialRecording(){
  if(!r||r.state==="inactive"||recorderStudio.finishing)return;
  recorderStudio.finishing=true;
  recordStatus("Finalizando arquivo. Não feche a página...");
+ stopFilmRecognition();
  try{r.stop();}catch(e){recorderStudio.finishing=false;recordStatus("❌ Falha ao finalizar: "+e.message);}
 }
 function savePresentialRecording(){
@@ -555,6 +572,147 @@ function saveEnvironmentPhoto(){
    setTimeout(()=>URL.revokeObjectURL(url),6000);
  }, "image/png");
 }
+
+for(const id of ["filmSourceLanguage","filmCaptionLanguage"]){
+ $(id).innerHTML=Object.entries(LANGS).map(([key,name])=>'<option value="'+key+'">'+name+"</option>").join("");
+}
+$("filmSourceLanguage").value="pt";
+$("filmCaptionLanguage").value="pt";
+function activeRecordingSeconds(){
+ if(!recorderStudio.started)return 0;
+ return Math.max(0,(Date.now()-recorderStudio.started-recorderStudio.pausedDuration-(recorderStudio.pausedAt?Date.now()-recorderStudio.pausedAt:0))/1000);
+}
+function cueTime(ms,srt=false){
+ const t=Math.max(0,Math.round(ms));
+ const h=String(Math.floor(t/3600000)).padStart(2,"0");
+ const m=String(Math.floor(t%3600000/60000)).padStart(2,"0");
+ const sec=String(Math.floor(t%60000/1000)).padStart(2,"0");
+ const mil=String(t%1000).padStart(3,"0");
+ return h+":"+m+":"+sec+(srt?",":".")+mil;
+}
+function cueText(c){
+ return (c.speaker?c.speaker+": ":"")+(c.translated||c.text);
+}
+function filmCaptionContent(format){
+ const srt=format==="srt";
+ const rows=recorderStudio.cues.map((cue,i)=>(
+   (srt?String(i+1)+"\n":"")+
+   cueTime(cue.start*1000,srt)+" --> "+cueTime(cue.end*1000,srt)+"\n"+
+   cueText(cue).replace(/-->/g,"→")+"\n"
+ ));
+ return (srt?"":"WEBVTT\n\n")+rows.join("\n");
+}
+function downloadLocalText(content,filename,mime){
+ const blob=new Blob([content],{type:mime+";charset=utf-8"});
+ const url=URL.createObjectURL(blob);
+ const a=document.createElement("a");a.href=url;a.download=filename;
+ document.body.append(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),9000);
+}
+function updateCaptionButtons(){
+ const ready=recorderStudio.cues.length>0;
+ for(const id of ["filmSaveSrt","filmSaveVtt","filmSaveTxt","filmTranslateCaptions"])$(id).disabled=!ready;
+ $("filmPreviewCaptions").disabled=!ready||!recorderStudio.blob||recorderStudio.mode!=="video";
+}
+function renderFilmCues(){
+ const view=$("filmCaptionList");
+ view.replaceChildren();
+ if(!recorderStudio.cues.length){view.textContent="Nenhuma legenda registrada.";updateCaptionButtons();return;}
+ for(const cue of recorderStudio.cues){
+   const row=document.createElement("div");row.className="caption-entry";
+   const title=document.createElement("strong");title.textContent=cueTime(cue.start*1000)+" • "+(cue.speaker||"Sem identificação")+" • "+(LANGS[cue.lang]||cue.lang);
+   const p=document.createElement("div");p.textContent=cue.text;
+   row.append(title,p);
+   if(cue.translated){const tr=document.createElement("div");tr.className="translated";tr.textContent="Tradução: "+cue.translated;row.append(tr);}
+   view.append(row);
+ }
+ updateCaptionButtons();
+}
+function addFilmCue(text,source="manual"){
+ const message=String(text||"").trim().slice(0,480);
+ if(!message)return;
+ const r=recorderStudio.recorder;
+ const active=r&&(r.state==="recording"||r.state==="paused");
+ if(!active&&!recorderStudio.blob){$("filmCaptionStatus").textContent="Inicie uma gravação antes de marcar legendas.";return;}
+ const time=active?activeRecordingSeconds():recorderStudio.mode==="video"?$("recordPlayback").currentTime:$("recordAudioPlayback").currentTime;
+ const start=Math.max(0,time-(source==="automatic"?1.7:0.2));
+ const duration=Math.max(1.8,Math.min(6,message.length/16));
+ recorderStudio.cues.push({start,end:start+duration,text:message,speaker:$("filmSpeaker").value.trim().slice(0,55),lang:$("filmSourceLanguage").value,translated:""});
+ recorderStudio.cues.sort((a,b)=>a.start-b.start);
+ $("filmCaptionStatus").textContent="✅ Trecho "+(source==="automatic"?"reconhecido":"marcado")+" em "+cueTime(start*1000)+". Revise antes de publicar.";
+ renderFilmCues();
+}
+$("filmAddCaption").onclick=()=>{if(!$("filmCaptionText").value.trim())return;$("filmCaptionStatus").textContent="";addFilmCue($("filmCaptionText").value,"manual");$("filmCaptionText").value="";};
+function stopFilmRecognition(){
+ recorderStudio.captionListening=false;
+ const r=recorderStudio.captionRecognition;
+ recorderStudio.captionRecognition=null;
+ if(r){r.onend=null;try{r.stop()}catch{}}
+ $("filmStopRecognition").disabled=true;
+ $("filmStartRecognition").disabled=!(recorderStudio.recorder?.state==="recording");
+ $("filmSourceLanguage").disabled=false;
+}
+$("filmStartRecognition").onclick=()=>{
+ if(recorderStudio.recorder?.state!=="recording"){ $("filmCaptionStatus").textContent="Inicie a gravação antes das legendas automáticas.";return;}
+ const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!SR){$("filmCaptionStatus").textContent="Reconhecimento indisponível neste navegador. Use Marcar legenda manual.";return;}
+ stopFilmRecognition();
+ const r=new SR();
+ r.lang=locale[$("filmSourceLanguage").value]||"pt-BR";
+ r.continuous=true;r.interimResults=false;
+ r.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal)addFilmCue(e.results[i][0].transcript,"automatic");};
+ r.onerror=e=>{
+   $("filmCaptionStatus").textContent="Reconhecimento: "+e.error+". Continue com legendas manuais. Alguns navegadores não permitem captar a fala enquanto gravam.";
+   if(["not-allowed","audio-capture","service-not-allowed","network"].includes(e.error))stopFilmRecognition();
+ };
+ r.onend=()=>{
+   if(recorderStudio.captionListening&&recorderStudio.recorder?.state==="recording"){
+     try{r.start();}catch{stopFilmRecognition();}
+   }
+ };
+ recorderStudio.captionRecognition=r;recorderStudio.captionListening=true;
+ $("filmStopRecognition").disabled=false;$("filmStartRecognition").disabled=true;
+ $("filmSourceLanguage").disabled=true;
+ try{r.start();$("filmCaptionStatus").textContent="🎙️ Tentando transcrever em "+LANGS[$("filmSourceLanguage").value]+". Pode interferir na gravação em certos aparelhos.";}
+ catch(e){stopFilmRecognition();$("filmCaptionStatus").textContent="Falha no reconhecimento: "+e.message;}
+};
+$("filmStopRecognition").onclick=stopFilmRecognition;
+$("filmTranslateCaptions").onclick=async()=>{
+ const target=$("filmCaptionLanguage").value;
+ if(!recorderStudio.cues.length)return;
+ $("filmTranslateCaptions").disabled=true;
+ $("filmCaptionStatus").textContent="Traduzindo trechos. O texto será processado por um serviço externo; confira o resultado.";
+ let ok=0,fail=0;
+ for(const cue of recorderStudio.cues){
+   if(cue.lang===target){cue.translated=cue.text;ok++;continue;}
+   try{
+     const response=await api("/api/translate",{text:cue.text,src:cue.lang,to:target});
+     cue.translated=response.text;ok++;
+   }catch{cue.translated="";fail++;}
+ }
+ renderFilmCues();
+ $("filmCaptionStatus").textContent="✅ Tradução concluída: "+ok+" trechos; "+fail+" sem tradução. Revise as legendas antes de usar no filme.";
+};
+function filmName(ext){return "Dal-Piero-Filme-Legendas-"+new Date().toISOString().slice(0,10)+"."+ext;}
+$("filmSaveSrt").onclick=()=>downloadLocalText(filmCaptionContent("srt"),filmName("srt"),"application/x-subrip");
+$("filmSaveVtt").onclick=()=>downloadLocalText(filmCaptionContent("vtt"),filmName("vtt"),"text/vtt");
+$("filmSaveTxt").onclick=()=>{
+ const text=recorderStudio.cues.map(c=>cueTime(c.start*1000)+" | "+(c.speaker||"Participante")+" | "+(LANGS[c.lang]||c.lang)+"\nOriginal: "+c.text+(c.translated?"\nTradução: "+c.translated:"")).join("\n\n");
+ downloadLocalText(text,filmName("txt"),"text/plain");
+};
+$("filmPreviewCaptions").onclick=()=>{
+ if(!recorderStudio.url||recorderStudio.mode!=="video")return;
+ const video=$("recordPlayback"),old=video.querySelector("track[data-generated]");
+ if(old)old.remove();
+ if(recorderStudio.vttUrl)URL.revokeObjectURL(recorderStudio.vttUrl);
+ recorderStudio.vttUrl=URL.createObjectURL(new Blob([filmCaptionContent("vtt")],{type:"text/vtt"}));
+ const track=document.createElement("track");track.kind="subtitles";track.srclang=$("filmCaptionLanguage").value;track.label="Dal Piero — legendas";track.default=true;track.dataset.generated="1";track.src=recorderStudio.vttUrl;
+ video.append(track);video.classList.remove("hidden");
+ video.textTracks[video.textTracks.length-1].mode="showing";
+ video.scrollIntoView({behavior:"smooth",block:"center"});
+ $("filmCaptionStatus").textContent="Legendas ativadas na prévia quando o navegador oferecer suporte. O vídeo salvo continua original; baixe também SRT/VTT.";
+};
+
 $("recordStart").onclick=beginPresentialRecording;
 $("recordPause").onclick=pausePresentialRecording;
 $("recordStop").onclick=stopPresentialRecording;
