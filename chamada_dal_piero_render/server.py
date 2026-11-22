@@ -27,9 +27,18 @@ def page():
 @app.get("/icon.svg")
 def icon():
     return send_from_directory(BASE,"icon.svg",mimetype="image/svg+xml")
+@app.get("/app-icon-192.png")
+def icon192():
+    return send_from_directory(BASE,"app-icon-192.png",mimetype="image/png")
+@app.get("/app-icon-512.png")
+def icon512():
+    return send_from_directory(BASE,"app-icon-512.png",mimetype="image/png")
 @app.get("/manifest.webmanifest")
 def manifest():
-    return jsonify(name="Chamada Traduzida Dal Piero",short_name="Chamada Dal Piero",start_url="/chamada.html",scope="/",display="standalone",theme_color="#10223d",background_color="#10223d",icons=[{"src":"/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}])
+    from flask import Response
+    content={"id":"/chamada.html?s=DALPIERO","name":"Chamada Traduzida Dal Piero","short_name":"Chamada Dal Piero","description":"Sala permanente de chamadas com tradução experimental.","start_url":"/chamada.html?s=DALPIERO","scope":"/","display":"standalone","background_color":"#10223d","theme_color":"#10223d","icons":[{"src":"/app-icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},{"src":"/app-icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}]}
+    return Response(json.dumps(content,ensure_ascii=False),mimetype="application/manifest+json")
+
 # Language greeting is based on an approximate public IP country, never on precise GPS.
 # Only the country code is returned to the browser; the IP is not persisted here.
 COUNTRY_LANG = {
