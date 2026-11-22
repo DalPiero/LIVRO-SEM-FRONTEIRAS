@@ -58,6 +58,16 @@ jobs:
                   driver.set_window_size(width,height)
                   driver.get('http://127.0.0.1:18765/chamada.html?s=DALPIERO')
                   driver.find_element(By.ID,'modeSelector')
+                  driver.find_element(By.ID,'stageTop')
+                  stage=driver.find_element(By.ID,'openStage')
+                  assert stage.is_enabled()
+                  driver.execute_script("arguments[0].click()",stage)
+                  assert driver.find_element(By.ID,'stageSetup').is_displayed()
+                  driver.execute_script("arguments[0].click()",driver.find_element(By.ID,'stageSpeaker'))
+                  assert driver.find_element(By.ID,'hostMode').is_selected()
+                  assert driver.find_element(By.ID,'hostKeyGroup').is_displayed()
+                  driver.execute_script("arguments[0].click()",driver.find_element(By.ID,'stageAudience'))
+                  assert not driver.find_element(By.ID,'hostMode').is_selected()
                   driver.find_element(By.ID,'meetingGuide')
                   driver.find_element(By.ID,'validationPanel')
                   dub=driver.find_element(By.ID,'filmDubCreate')
@@ -73,7 +83,10 @@ jobs:
                   viewport=driver.execute_script('return document.documentElement.scrollWidth-window.innerWidth')
                   assert viewport<=8,f'Horizontal overflow {viewport}px at {width}px'
                   print('PASS headless Chrome width',width)
-              print('PASS: mode controls, responsive widths, dubbing prerequisite, browser diagnostics')
+              driver.get('http://127.0.0.1:18765/chamada.html?s=DALPIERO&plateia=1')
+              assert driver.find_element(By.ID,'stageHeading').text.startswith('🎧')
+              assert driver.find_element(By.ID,'roomInput').get_attribute('value')=='DALPIERO'
+              print('PASS: presentation stage, audience link, responsive widths, dubbing prerequisite, browser diagnostics')
           finally:
               driver.quit()
           PY
