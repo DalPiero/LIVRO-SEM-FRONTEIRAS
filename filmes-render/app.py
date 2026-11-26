@@ -202,7 +202,9 @@ def download(job_id, filename):
 
 @app.get("/healthz")
 def health():
-    return jsonify(online=True, configured=bool(os.getenv("OPENAI_API_KEY") and os.getenv("FILMES_TEST_PASSWORD")))
+    has_key = bool(os.getenv("OPENAI_API_KEY", "").strip())
+    has_password = bool(os.getenv("FILMES_TEST_PASSWORD"))
+    return jsonify(online=True, configured=has_key and has_password, api_key_configured=has_key, password_configured=has_password)
 
 
 @app.before_request
