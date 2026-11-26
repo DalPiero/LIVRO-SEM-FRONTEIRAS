@@ -1,1 +1,4 @@
-Rmxhc2s+PTMuMSw8NApvcGVuYWk+PTIuMCw8Mwp5dC1kbHAKZ3VuaWNvcm4+PTIzLDwyNAo=
+Flask>=3.1,<4
+openai>=2.0,<3
+yt-dlp
+gunicorn>=23,<24
