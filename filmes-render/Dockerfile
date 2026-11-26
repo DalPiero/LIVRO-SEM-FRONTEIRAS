@@ -1,1 +1,7 @@
-RlJPTSBweXRob246My4xMi1zbGltCldPUktESVIgL2FwcApSVU4gYXB0LWdldCB1cGRhdGUgJiYgYXB0LWdldCBpbnN0YWxsIC15IC0tbm8taW5zdGFsbC1yZWNvbW1lbmRzIGZmbXBlZyAmJiBybSAtcmYgL3Zhci9saWIvYXB0L2xpc3RzLyoKQ09QWSBmaWxtZXMtcmVuZGVyL3JlcXVpcmVtZW50cy50eHQgLgpSVU4gcGlwIGluc3RhbGwgLS1uby1jYWNoZS1kaXIgLXIgcmVxdWlyZW1lbnRzLnR4dApDT1BZIGZpbG1lcy1yZW5kZXIvYXBwLnB5IGZpbG1lcy1yZW5kZXIvaW5kZXguaHRtbCAuLwpDTUQgWyJzaCIsIi1jIiwiZXhlYyBndW5pY29ybiBhcHA6YXBwIC0tYmluZCAwLjAuMC4wOiR7UE9SVDotMTAwMDB9IC0td29ya2VycyAxIC0tdGhyZWFkcyA0Il0K
+FROM python:3.12-slim
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+COPY filmes-render/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY filmes-render/app.py filmes-render/index.html ./
+CMD ["sh","-c","exec gunicorn app:app --bind 0.0.0.0:${PORT:-10000} --workers 1 --threads 4"]
