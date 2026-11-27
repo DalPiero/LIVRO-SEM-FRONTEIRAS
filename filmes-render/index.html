@@ -18,6 +18,11 @@ body{margin:0;background:#0b1016;color:#f3f1ea;font:1rem system-ui}section{max-w
   const e = id => document.getElementById('filme-' + id);
   const form = e('form'), status = e('status'), outputs = e('resultados');
   const button = form.querySelector('button');
+  const incoming = new URLSearchParams(location.search);
+  const film = incoming.get('filme');
+  const language = incoming.get('idioma');
+  if (film && film.length <= 8192) e('link').value = film;
+  if (language && language.length <= 80) e('idioma').value = language;
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   async function request(path, options) {
     const response = await fetch(path, options);
