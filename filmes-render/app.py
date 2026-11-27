@@ -1,4 +1,3 @@
-import hmac
 import json
 import logging
 import os
@@ -203,21 +202,4 @@ def download(job_id, filename):
 @app.get("/healthz")
 def health():
     has_key = bool(os.getenv("OPENAI_API_KEY", "").strip())
-    has_password = bool(os.getenv("FILMES_TEST_PASSWORD"))
-    return jsonify(online=True, configured=has_key and has_password, api_key_configured=has_key, password_configured=has_password)
-
-
-@app.before_request
-def protect_preview():
-    if request.path == "/healthz":
-        return None
-    password = os.getenv("FILMES_TEST_PASSWORD")
-    if not password or not os.getenv("OPENAI_API_KEY"):
-        if request.path == "/":
-            return None
-        return jsonify(error="Teste ainda não ativado. Configure as duas variáveis no ambiente do serviço."), 503
-    auth = request.authorization
-    if not auth or auth.type != "basic" or auth.username != "dalpiero" or not hmac.compare_digest((auth.password or "").encode(), password.encode()):
-        return Response("Acesso restrito ao teste.", status=401,
-                        headers={"WWW-Authenticate": 'Basic realm="Tradutor Filmes"'})
-    return None
+    return jsonify(online=True, configured=has_key, api_key_configured=has_key)
