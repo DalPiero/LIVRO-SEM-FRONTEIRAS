@@ -1,12 +1,12 @@
-<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Tradutor Universal Dal Piero · Teste de filmes</title><style>
-body{margin:0;background:#0b1016;color:#f3f1ea;font:1rem system-ui}section{max-width:900px;margin:24px auto;border-radius:12px}label{display:block;margin-top:8px}input:not([type=checkbox]){display:block;width:min(100%,620px);box-sizing:border-box;padding:10px;margin:4px 0 10px}button{background:#d5b56d;border:0;padding:12px;border-radius:8px;font:inherit;cursor:pointer}a{color:#e2c681}footer{padding:16px;text-align:center}
+<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Tradutor Universal Dal Piero · Filmes</title><style>
+body{margin:0;background:#0b1016;color:#f3f1ea;font:1rem system-ui}section{max-width:900px;margin:24px auto;border-radius:12px}label{display:block;margin-top:8px}select,input:not([type=checkbox]){display:block;width:min(100%,620px);box-sizing:border-box;padding:10px;margin:4px 0 10px}button{background:#d5b56d;border:0;padding:12px;border-radius:8px;font:inherit;cursor:pointer}a{color:#e2c681}footer{padding:16px;text-align:center}
 </style><body><section id="filme-url" style="background:#111820;border-bottom:1px solid #283542;padding:20px max(16px, calc((100% - 1464px)/2))">
   <h2 style="margin:0 0 8px;color:#d5b56d">Traduzir filme por URL</h2>
   <form id="filme-form">
     <label for="filme-link">URL do filme · até 240 minutos</label>
     <input id="filme-link" type="url" placeholder="https://…" required>
     <label for="filme-idioma">Idioma de destino</label>
-    <input id="filme-idioma" value="Português do Brasil" required maxlength="80">
+    <select id="filme-idioma" name="idioma" required><option>Português do Brasil</option><option>Inglês</option><option>Espanhol</option><option>Francês</option><option>Alemão</option><option>Italiano</option><option>Árabe</option><option>Chinês simplificado</option><option>Japonês</option><option>Coreano</option><option>Hindi</option></select>
     <label style="display:block;margin:8px 0"><input style="width:auto;min-height:0" type="checkbox" id="filme-voz" checked> Gerar áudio traduzido com voz sintética</label>
     <button class="primary" type="submit">Traduzir filme</button>
   </form>
@@ -22,7 +22,7 @@ body{margin:0;background:#0b1016;color:#f3f1ea;font:1rem system-ui}section{max-w
   const film = incoming.get('filme');
   const language = incoming.get('idioma');
   if (film && film.length <= 8192) e('link').value = film;
-  if (language && language.length <= 80) e('idioma').value = language;
+  if (language && Array.from(e('idioma').options).some(option => option.value === language)) e('idioma').value = language;
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   async function request(path, options) {
     const response = await fetch(path, options);
@@ -63,4 +63,4 @@ body{margin:0;background:#0b1016;color:#f3f1ea;font:1rem system-ui}section{max-w
     }
   });
 })();
-</script><footer><a href="https://tradutor-dal-piero-filmes-teste-fadal-9821.vercel.app/">Abrir o Tradutor e a amostra de teste</a></footer></body></html>
+</script><footer><a href="https://tradutor-universal-dal-piero-fadal-9821.vercel.app/">Voltar ao Tradutor Universal</a></footer></body></html>
