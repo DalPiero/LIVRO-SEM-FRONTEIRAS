@@ -73,7 +73,7 @@ def process(job_id, url, language, voice):
         client = OpenAI(timeout=120, max_retries=3)
         stage(job_id, "Baixando e verificando o filme…")
         run(os.sys.executable, "-m", "yt_dlp", "--ignore-config", "--no-playlist",
-            "--match-filters", "duration <= 14400", "--max-filesize", "6G",
+            "--match-filters", "duration <=? 14400", "--max-filesize", "6G",
             "--merge-output-format", "mkv", "-f", "bv*[height<=1080]+ba/b[height<=1080]/b",
             "-o", str(folder / "origem.%(ext)s"), "--", url)
         sources = [path for path in folder.glob("origem.*") if path.suffix not in (".part", ".ytdl")]
